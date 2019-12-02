@@ -1,0 +1,27 @@
+syntax = "proto3";
+package main;
+
+message Package {
+	string resource = 1;
+	string id = 2;
+	string subject = 3;
+	string value = 4;
+	uint64 extent = 5;
+	string created = 6;
+	string modified = 7;
+	repeated string members = 8;
+}
+
+message File {
+	string value = 1;
+	string format = 2;
+	uint64 extent = 3;
+}
+
+message Resource {
+	oneof resource {
+		Package package = 1;
+		string message = 2;
+		File file = 3;
+	}
+}
