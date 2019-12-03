@@ -9,7 +9,9 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
+	cid "github.com/ipfs/go-cid"
 	ipfs "github.com/ipfs/go-ipfs-api"
+	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 )
 
@@ -99,13 +101,23 @@ func main() {
 
 	log.Println("pkg", pkg)
 
+	c, err := cid.Parse(pkg.Id)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	root, err := c.StringOfBase(multibase.Base32)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		if req.Method == "GET" {
-			Get(res, req, pkg, sh, db)
+			Get(res, req, root, pkg, sh, db)
 		} else if req.Method == "PUT" {
-			Put(res, req, pkg, sh, db)
+			Put(res, req, root, pkg, sh, db)
 		} else if req.Method == "HEAD" {
-			Head(res, req, pkg, sh, db)
+			Head(res, req, root, pkg, sh, db)
 		} else if req.Method == "DELETE" {
 			if req.URL.Path == "/" {
 

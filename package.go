@@ -11,6 +11,7 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	ipfs "github.com/ipfs/go-ipfs-api"
+	"github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 )
 
@@ -49,11 +50,11 @@ func NewPackage(path, resource string, sh *ipfs.Shell) (*Package, error) {
 	pkg := &Package{
 		Resource: resource,
 		Subject:  defaultSubject,
-		Value:    emptyDirectory,
+		Value:    emptyDirectoryCID.Bytes(),
 		Extent:   0,
 		Created:  dateTime,
 		Modified: dateTime,
-		Members:  make([]string, 0),
+		Member:   make([]string, 0),
 	}
 
 	normalized, err := pkg.Normalize(path, nil)
@@ -62,10 +63,17 @@ func NewPackage(path, resource string, sh *ipfs.Shell) (*Package, error) {
 	}
 
 	reader := strings.NewReader(normalized)
-	pkg.Id, err = sh.Add(reader, ipfs.Pin(true), ipfs.RawLeaves(true), ipfs.CidVersion(1))
+	s, err := sh.Add(reader, ipfs.Pin(true), ipfs.RawLeaves(true), ipfs.CidVersion(1))
 	if err != nil {
 		return nil, err
 	}
+
+	c, err := cid.Decode(s)
+	if err != nil {
+		return nil, err
+	}
+
+	pkg.Id = c.Bytes()
 
 	return pkg, nil
 }
@@ -90,9 +98,18 @@ func (pkg *Package) Normalize(path string, txn *badger.Txn) (s string, err error
 
 // NQuads converts the Package to a slice of ld.*Quads
 func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+7+len(pkg.Members)*2)
+	doc := make([]*ld.Quad, len(base), len(base)+7+len(pkg.Member)*2)
 	copy(doc, base)
-	value := fmt.Sprintf("dweb:/ipfs/%s", pkg.Value)
+
+	c, err := cid.Cast(pkg.Value)
+	if err != nil {
+		return nil, err
+	}
+	s, err := c.StringOfBase(multibase.Base32)
+	if err != nil {
+		return nil, err
+	}
+	value := fmt.Sprintf("dweb:/ipfs/%s", s)
 	extent := strconv.FormatUint(pkg.Extent, 10)
 	doc = append(doc,
 		ld.NewQuad(subject, typeIri, packageIri, ""),
@@ -104,7 +121,7 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(pkg.Modified, dateTime, ""), ""),
 	)
 
-	for _, name := range pkg.Members {
+	for _, name := range pkg.Member {
 		key := fmt.Sprintf("%s/%s", path, name)
 		item, err := txn.Get([]byte(key))
 		if err != nil {
@@ -125,22 +142,39 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 				ld.NewQuad(subject, hadMemberIri, uri, ""),
 				ld.NewQuad(uri, membershipResourceIri, resource, ""),
 			)
-		} else if m != "" {
-			member := ld.NewIRI("ul:/ipfs/" + m)
+		} else if m != nil {
+			c, err := cid.Cast(m)
+			if err != nil {
+				return nil, err
+			}
+			s, err := c.StringOfBase(multibase.Base32)
+			if err != nil {
+				return nil, err
+			}
+			member := ld.NewIRI("ul:/ipfs/" + s)
 			doc = append(doc, ld.NewQuad(subject, hadMemberIri, member, ""))
-			if m != name {
+			if s != name {
 				resource := fmt.Sprintf("%s/%s", pkg.Resource, name)
 				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
 		} else if f != nil {
-			member := ld.NewIRI("dweb:/ipfs/" + f.Value)
+			c, err := cid.Cast(f.Value)
+			if err != nil {
+				return nil, err
+			}
+			s, err := c.StringOfBase(multibase.Base32)
+			if err != nil {
+				return nil, err
+			}
+
+			member := ld.NewIRI("dweb:/ipfs/" + s)
 			extent := strconv.FormatUint(f.Extent, 10)
 			doc = append(doc,
 				ld.NewQuad(subject, hadMemberIri, member, ""),
 				ld.NewQuad(member, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
 				ld.NewQuad(member, formatIri, ld.NewLiteral(f.Format, ld.XSDString, ""), ""),
 			)
-			if f.Value != name {
+			if s != name {
 				resource := fmt.Sprintf("%s/%s", pkg.Resource, name)
 				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
@@ -152,9 +186,9 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 
 // JSON converts the Package to a JSON-LD document
 func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, error) {
-	members := make([]map[string]interface{}, 0, len(pkg.Members))
+	members := make([]map[string]interface{}, 0, len(pkg.Member))
 
-	for _, name := range pkg.Members {
+	for _, name := range pkg.Member {
 		key := fmt.Sprintf("%s/%s", path, name)
 		item, err := txn.Get([]byte(key))
 		if err != nil {
@@ -173,25 +207,51 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 				"@id":                    fmt.Sprintf("ul:/ipfs/%s#%s", p.Id, p.Subject),
 				"ldp:membershipResource": p.Resource,
 			})
-		} else if m != "" {
-			member := map[string]interface{}{"@id": "ul:/ipfs/%s" + m}
-			if name != m {
+		} else if m != nil {
+			c, err := cid.Cast(m)
+			if err != nil {
+				return nil, err
+			}
+			s, err := c.StringOfBase(multibase.Base32)
+			if err != nil {
+				return nil, err
+			}
+			member := map[string]interface{}{"@id": "ul:/ipfs/" + s}
+			if name != s {
 				member["ldp:membershipResource"] = fmt.Sprintf("%s/%s", pkg.Resource, name)
 			}
 			members = append(members, member)
 		} else if f != nil {
+			c, err := cid.Cast(f.Value)
+			if err != nil {
+				return nil, err
+			}
+			s, err := c.StringOfBase(multibase.Base32)
+			if err != nil {
+				return nil, err
+			}
+
 			member := map[string]interface{}{
-				"@id":            "dweb:/ipfs/%s" + f.Value,
+				"@id":            "dweb:/ipfs/" + s,
 				"dcterms:extent": f.Extent,
 				"dcterms:format": f.Format,
 			}
 
-			if name != f.Value {
+			if name != s {
 				member["ldp:membershipResource"] = fmt.Sprintf("%s/%s", pkg.Resource, name)
 			}
 
 			members = append(members, member)
 		}
+	}
+
+	c, err := cid.Cast(pkg.Value)
+	if err != nil {
+		return nil, err
+	}
+	s, err := c.StringOfBase(multibase.Base32)
+	if err != nil {
+		return nil, err
 	}
 
 	return map[string]interface{}{
@@ -202,7 +262,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 		"dcterms:created":        pkg.Created,
 		"dcterms:modified":       pkg.Modified,
 		"prov:value": map[string]interface{}{
-			"@id":            fmt.Sprintf("dweb:/ipfs/%s", pkg.Value),
+			"@id":            fmt.Sprintf("dweb:/ipfs/%s", s),
 			"dcterms:extent": strconv.FormatUint(pkg.Extent, 10),
 		},
 		"prov:hadMember": members,
