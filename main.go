@@ -1,18 +1,16 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
-	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	ipfs "github.com/ipfs/go-ipfs-api"
+	ld "github.com/piprate/json-gold/ld"
 )
 
 const defaultHost = "localhost:5001"
@@ -28,17 +26,7 @@ var shError = "IPFS Daemon not running"
 
 var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
-/*
-Okay
-there's one lockfile and it's package.jsonld
-It has an explicit content URI for a subject though
-*/
-
-type Response interface {
-	NQuads() (io.Reader, string)
-	JSONLD() (io.Reader, string)
-	HTML() (io.Reader, string)
-}
+var proc = ld.NewJsonLdProcessor()
 
 func main() {
 	if host == "" {
@@ -111,98 +99,13 @@ func main() {
 
 	log.Println("pkg", pkg)
 
-	return
-
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
 		if req.Method == "GET" {
-			accept := req.Header.Get("Accept")
-			ifNoneMatch := req.Header.Get("If-None-Match")
-			if req.URL.Path == "/" {
-				if ifNoneMatch == pkg.Id {
-					res.WriteHeader(304)
-					return
-				}
-
-				res.Header().Add("ETag", pkg.Id)
-				if accept == "application/ld+json" {
-					res.Header().Add("Content-Type", accept)
-					res.WriteHeader(200)
-					encoder := json.NewEncoder(res)
-					_ = db.View(func(txn *badger.Txn) error {
-						doc, err := pkg.JSON("/", txn)
-						if err != nil {
-							return err
-						}
-						return encoder.Encode(doc)
-					})
-				} else if accept == "application/n-quads" {
-					reader, err := sh.Cat(pkg.Id)
-					if err != nil {
-						res.WriteHeader(502)
-						return
-					}
-
-					res.Header().Add("Content-Type", accept)
-					res.WriteHeader(200)
-					_, _ = io.Copy(res, reader)
-				} else {
-					res.WriteHeader(406)
-				}
-				return
-			}
-
-			match := pathRegex.FindStringSubmatch(req.URL.Path)
-			if match == nil {
-				res.WriteHeader(404)
-				return
-			}
-
-			path = match[0]
-
-			last := strings.LastIndex(path, "/")
-
-			// terms := strings.Split(path[1:], "/")
-
-			// container := strings.Join(terms[:len(terms)-1], "/")
-
-			stats, err := sh.ObjectStat(pkg.Value + path[:last])
-			if err != nil {
-				log.Println(err)
-				res.WriteHeader(502)
-				return
-			}
-
-			if stats.NumLinks > 0 || stats.Hash == emptyDirectory {
-				// Directory!
-
-			} else {
-				// File!
-
-			}
-
-			// if stats.NumLinks
-
-			// if req.URL.Path[1] == '/' {
-			// 	name := fmt.Sprintf("/ipfs%s", req.URL.Path)
-			// 	// sh.ObjectStat(key string)
-			// 	// sh.List(path string)
-			// 	if resource, has := pkg.Members[name]; has {
-
-			// 	} else {
-			// 		res.WriteHeader(404)
-			// 	}
-			// }
-
+			Get(res, req, pkg, sh, db)
 		} else if req.Method == "PUT" {
-			// contentType := req.Header.Get("Content-Type")
-
-			if req.URL.Path == "/" {
-
-			}
+			Put(res, req, pkg, sh, db)
 		} else if req.Method == "HEAD" {
-			if req.URL.Path == "/" {
-
-			}
+			Head(res, req, pkg, sh, db)
 		} else if req.Method == "DELETE" {
 			if req.URL.Path == "/" {
 

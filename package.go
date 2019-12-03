@@ -8,7 +8,7 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	"github.com/gogo/protobuf/proto"
+	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	ipfs "github.com/ipfs/go-ipfs-api"
 	ld "github.com/piprate/json-gold/ld"
@@ -69,95 +69,6 @@ func NewPackage(path, resource string, sh *ipfs.Shell) (*Package, error) {
 
 	return pkg, nil
 }
-
-// func UnmarshalRoot(reader io.Reader, sh *ipfs.Shell) (p *Package, err error) {
-// 	doc := map[string]interface{}{}
-// 	decoder := json.NewDecoder(reader)
-// 	if err = decoder.Decode(&doc); err != nil {
-// 		return
-// 	}
-
-// 	p = &Package{
-// 		Members: make([]string, 0),
-// 	}
-
-// 	id, _ := doc["@id"].(string)
-// 	packageMatch := packageURI.FindStringSubmatch(id)
-// 	if packageMatch != nil {
-// 		p.Id, p.Subject = packageMatch[1], packageMatch[2]
-// 	} else {
-// 		err = fmt.Errorf("Invalid package @id: %v", doc["@id"])
-// 		return
-// 	}
-
-// 	p.Resource, _ = doc["ldp:membershipResource"].(string)
-
-// 	value, is := doc["prov:value"].(map[string]interface{})
-// 	if !is {
-// 		err = fmt.Errorf("Invalid package prov:value: %v", doc["prov:value"])
-// 		return
-// 	}
-
-// 	valueID, _ := value["@id"].(string)
-// 	valueMatch := fileURI.FindStringSubmatch(valueID)
-// 	if valueMatch == nil {
-// 		err = fmt.Errorf("Invalid package prov:value/@id: %v", doc["prov:value"])
-// 		return
-// 	}
-
-// 	p.Value = valueMatch[1]
-
-// 	p.Extent, is = value["dcterms:extent"].(uint64)
-// 	if !is {
-// 		err = fmt.Errorf("Invalid package prov:value/dcterms:extent: %v", value["dcterms:extent"])
-// 	}
-
-// 	p.Value = valueMatch[1]
-
-// 	created, _ := doc["dcterms:created"].(string)
-// 	modified, _ := doc["dcterms:modified"].(string)
-// 	p.Created, p.Modified = created, modified
-
-// 	members, _ := doc["prov:hadMember"].([]interface{})
-// 	for _, element := range members {
-// 		member, _ := element.(map[string]interface{})
-// 		key, _ := member["@id"].(string)
-// 		val, _ := member["ldp:membershipResource"].(string)
-
-// 		u, err := url.Parse(val)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-
-// 		tail := strings.LastIndex(u.Path, "/") + 1
-// 		name := u.Path[tail:]
-
-// 		packageMatch := packageURI.FindStringSubmatch(key)
-// 		if packageMatch != nil {
-// 			p.Packages[name], err = LoadPackage(packageMatch[1], packageMatch[2], val, sh)
-// 			if err != nil {
-// 				return nil, err
-// 			}
-// 			continue
-// 		}
-
-// 		messageMatch := messageURI.FindStringSubmatch(key)
-// 		if messageMatch != nil {
-// 			p.Messages[name] = messageMatch[1]
-// 			continue
-// 		}
-
-// 		fileMatch := fileURI.FindStringSubmatch(key)
-// 		if fileMatch != nil {
-// 			extent, _ := member["dcterms:extent"].(uint64)
-// 			format, _ := member["dcterms:format"].(string)
-// 			p.Files[name] = &File{Value: fileMatch[1], Format: format, Extent: extent}
-// 			continue
-// 		}
-// 	}
-
-// 	return p, nil
-// }
 
 func (pkg *Package) Normalize(path string, txn *badger.Txn) (s string, err error) {
 	ds := ld.NewRDFDataset()
@@ -297,34 +208,3 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 		"prov:hadMember": members,
 	}, nil
 }
-
-// var frame = map[string]interface{}{
-// 	"@context": contextURL,
-// 	"@type":    packageIri.Value,
-// }
-
-// func LoadPackage(root, subject, resource string, sh *ipfs.Shell) (*Package, error) {
-// 	proc := ld.NewJsonLdProcessor()
-// 	opts := ld.NewJsonLdOptions("")
-// 	opts.Format = "application/n-quads"
-// 	opts.DocumentLoader = loader.NewHTTPDocumentLoader(sh)
-
-// 	reader, err := sh.Cat(root)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	doc, err := proc.FromRDF(reader, opts)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	framed, err := proc.Frame(doc, frame, opts)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	log.Println(framed)
-
-// 	return nil, nil
-// }
