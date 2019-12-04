@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
@@ -13,6 +14,7 @@ import (
 	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
+	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 
 	types "github.com/underlay/pkgs/types"
@@ -284,9 +286,10 @@ func percolate(
 		}
 
 		parent.Value = value.Cid().Bytes()
+		parent.Modified = time.Now().Format(time.RFC3339)
 
 		// Now that parent.Value has changed, we need to re-normalize
-		id, err := parent.Normalize(parentPath, fs, txn)
+		id, err := parent.Normalize(ctx, parentPath, fs, txn)
 		if err != nil {
 			return err
 		}
@@ -301,7 +304,13 @@ func percolate(
 		next := path.IpfsPath(id)
 
 		if parentPath == "/" {
-			err = pin.Update(ctx, parentValue, value, options.Pin.Unpin(true))
+			s, err := parentValue.Cid().StringOfBase(multibase.Base32)
+			if err != nil {
+				return err
+			}
+
+			unpin := s != types.EmptyDirectory
+			err = pin.Update(ctx, parentValue, value, options.Pin.Unpin(unpin))
 			if err != nil {
 				return err
 			}

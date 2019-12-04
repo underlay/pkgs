@@ -19,12 +19,13 @@ import (
 )
 
 const defaultSubject = "_:c14n0"
-const emptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
+const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
 
 const dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 
-var emptyDirectoryCID, _ = cid.Decode(emptyDirectory)
-var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", emptyDirectory)
+var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
+
+var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
 var packageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
@@ -52,27 +53,27 @@ type Pkgs interface {
 	API() core.CoreAPI
 }
 
-func NewPackage(path, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
+func NewPackage(ctx context.Context, path, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
 	dateTime := time.Now().Format(time.RFC3339)
 
 	pkg := &Package{
 		Resource: resource,
 		Subject:  defaultSubject,
-		Value:    emptyDirectoryCID.Bytes(),
+		Value:    EmptyDirectoryCID.Bytes(),
 		Extent:   0,
 		Created:  dateTime,
 		Modified: dateTime,
 		Member:   make([]string, 0),
 	}
 
-	c, err := pkg.Normalize(path, fs, nil)
+	c, err := pkg.Normalize(ctx, path, fs, nil)
 	return c, pkg, err
 }
 
 // Normalize re-computes the normalized n-quads representation of the package,
 // pins it to IPFS, and sets the pkg.Id with the result. It returns the string cid.
 // You probably want to be careful about unpinning the resulting CID sometime afterwards
-func (pkg *Package) Normalize(path string, fs core.UnixfsAPI, txn *badger.Txn) (c cid.Cid, err error) {
+func (pkg *Package) Normalize(ctx context.Context, path string, fs core.UnixfsAPI, txn *badger.Txn) (c cid.Cid, err error) {
 	ds := ld.NewRDFDataset()
 	ds.Graphs["@default"], err = pkg.NQuads(path, txn)
 	if err != nil {
@@ -90,7 +91,7 @@ func (pkg *Package) Normalize(path string, fs core.UnixfsAPI, txn *badger.Txn) (
 
 	reader := strings.NewReader(res.(string))
 	resolved, err := fs.Add(
-		context.TODO(),
+		ctx,
 		files.NewReaderFile(reader),
 		options.Unixfs.Pin(true),
 		options.Unixfs.RawLeaves(true),
