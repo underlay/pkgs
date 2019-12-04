@@ -1,8 +1,8 @@
-package main
+package types
 
 const contextURL = "ipfs://bafkreiarfiphrufhuu2pm5uzykmyy6d63tf3wffdqlvkthqhxb4ipkjlau"
 
-const context = `{
+const rawContext = `{
 	"@context": {
     "dcterms": "http://purl.org/dc/terms/",
 		"prov": "http://www.w3.org/ns/prov#",

@@ -1,6 +1,7 @@
-package main
+package types
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -10,8 +11,10 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
-	ipfs "github.com/ipfs/go-ipfs-api"
-	"github.com/multiformats/go-multibase"
+	files "github.com/ipfs/go-ipfs-files"
+	core "github.com/ipfs/interface-go-ipfs-core"
+	options "github.com/ipfs/interface-go-ipfs-core/options"
+	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 )
 
@@ -44,7 +47,12 @@ var base = []*ld.Quad{
 	ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
 }
 
-func NewPackage(path, resource string, sh *ipfs.Shell) (*Package, error) {
+type Pkgs interface {
+	DB() *badger.DB
+	API() core.CoreAPI
+}
+
+func NewPackage(path, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
 	dateTime := time.Now().Format(time.RFC3339)
 
 	pkg := &Package{
@@ -57,28 +65,14 @@ func NewPackage(path, resource string, sh *ipfs.Shell) (*Package, error) {
 		Member:   make([]string, 0),
 	}
 
-	normalized, err := pkg.Normalize(path, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	reader := strings.NewReader(normalized)
-	s, err := sh.Add(reader, ipfs.Pin(true), ipfs.RawLeaves(true), ipfs.CidVersion(1))
-	if err != nil {
-		return nil, err
-	}
-
-	c, err := cid.Decode(s)
-	if err != nil {
-		return nil, err
-	}
-
-	pkg.Id = c.Bytes()
-
-	return pkg, nil
+	c, err := pkg.Normalize(path, fs, nil)
+	return c, pkg, err
 }
 
-func (pkg *Package) Normalize(path string, txn *badger.Txn) (s string, err error) {
+// Normalize re-computes the normalized n-quads representation of the package,
+// pins it to IPFS, and sets the pkg.Id with the result. It returns the string cid.
+// You probably want to be careful about unpinning the resulting CID sometime afterwards
+func (pkg *Package) Normalize(path string, fs core.UnixfsAPI, txn *badger.Txn) (c cid.Cid, err error) {
 	ds := ld.NewRDFDataset()
 	ds.Graphs["@default"], err = pkg.NQuads(path, txn)
 	if err != nil {
@@ -88,12 +82,28 @@ func (pkg *Package) Normalize(path string, txn *badger.Txn) (s string, err error
 	api := ld.NewJsonLdApi()
 	opts := ld.NewJsonLdOptions("")
 	opts.Format = "application/n-quads"
-	res, err := api.Normalize(ds, opts)
+	var res interface{}
+	res, err = api.Normalize(ds, opts)
 	if err != nil {
 		return
 	}
 
-	return res.(string), nil
+	reader := strings.NewReader(res.(string))
+	resolved, err := fs.Add(
+		context.TODO(),
+		files.NewReaderFile(reader),
+		options.Unixfs.Pin(true),
+		options.Unixfs.RawLeaves(true),
+		options.Unixfs.CidVersion(1),
+	)
+
+	if err != nil {
+		return
+	}
+
+	c = resolved.Cid()
+	pkg.Id = c.Bytes()
+	return
 }
 
 // NQuads converts the Package to a slice of ld.*Quads
@@ -208,11 +218,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 				"ldp:membershipResource": p.Resource,
 			})
 		} else if m != nil {
-			c, err := cid.Cast(m)
-			if err != nil {
-				return nil, err
-			}
-			s, err := c.StringOfBase(multibase.Base32)
+			_, s, err := GetCid(m)
 			if err != nil {
 				return nil, err
 			}
@@ -222,11 +228,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 			}
 			members = append(members, member)
 		} else if f != nil {
-			c, err := cid.Cast(f.Value)
-			if err != nil {
-				return nil, err
-			}
-			s, err := c.StringOfBase(multibase.Base32)
+			_, s, err := GetCid(f.Value)
 			if err != nil {
 				return nil, err
 			}
@@ -245,11 +247,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 		}
 	}
 
-	c, err := cid.Cast(pkg.Value)
-	if err != nil {
-		return nil, err
-	}
-	s, err := c.StringOfBase(multibase.Base32)
+	_, s, err := GetCid(pkg.Value)
 	if err != nil {
 		return nil, err
 	}

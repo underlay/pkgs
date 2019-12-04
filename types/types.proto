@@ -1,5 +1,5 @@
 syntax = "proto3";
-package main;
+package types;
 
 message Package {
 	string resource = 1;

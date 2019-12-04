@@ -5,14 +5,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	ipfs "github.com/ipfs/go-ipfs-api"
 	multibase "github.com/multiformats/go-multibase"
-	ld "github.com/piprate/json-gold/ld"
+
+	server "github.com/underlay/pkgs/server"
+	types "github.com/underlay/pkgs/types"
 )
 
 const defaultHost = "localhost:5001"
@@ -25,10 +26,6 @@ var name = os.Getenv("PKGS_NAME")
 var origin = os.Getenv("PKGS_ORIGIN")
 
 var shError = "IPFS Daemon not running"
-
-var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
-
-var proc = ld.NewJsonLdProcessor()
 
 func main() {
 	if host == "" {
@@ -68,16 +65,18 @@ func main() {
 
 	index := "/"
 
-	r := &Resource{}
+	var pkg *types.Package
+	var root string
 	err = db.Update(func(txn *badger.Txn) error {
+		r := &types.Resource{}
 		item, err := txn.Get([]byte(index))
 		if err == badger.ErrKeyNotFound {
-			pkg, err := NewPackage(index, resource, sh)
+			root, pkg, err = types.NewPackage(index, resource, sh)
 			if err != nil {
 				return err
 			}
 
-			r.Resource = &Resource_Package{pkg}
+			r.Resource = &types.Resource_Package{pkg}
 			val, err := proto.Marshal(r)
 			if err != nil {
 				return err
@@ -87,48 +86,39 @@ func main() {
 		} else if err != nil {
 			return err
 		} else {
-			return item.Value(func(val []byte) error {
+			err = item.Value(func(val []byte) error {
 				return proto.Unmarshal(val, r)
 			})
+			if err != nil {
+				return err
+			}
+
+			pkg := r.GetPackage()
+			if pkg == nil {
+				return fmt.Errorf("Invalid index: %v", r)
+			}
+
+			c, err := cid.Parse(pkg.Id)
+			if err != nil {
+				return err
+			}
+
+			root, err = c.StringOfBase(multibase.Base32)
+			if err != nil {
+				return err
+			}
 		}
+		return nil
 	})
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	pkg := r.GetPackage()
+	log.Println("Root:", root)
+	log.Println("Package:", pkg)
 
-	log.Println("pkg", pkg)
-
-	c, err := cid.Parse(pkg.Id)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	root, err := c.StringOfBase(multibase.Base32)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		if req.Method == "GET" {
-			Get(res, req, root, pkg, sh, db)
-		} else if req.Method == "PUT" {
-			Put(res, req, root, pkg, sh, db)
-		} else if req.Method == "HEAD" {
-			Head(res, req, root, pkg, sh, db)
-		} else if req.Method == "DELETE" {
-			if req.URL.Path == "/" {
-
-			}
-		} else if req.Method == "OPTIONS" {
-			if req.URL.Path == "/" {
-
-			}
-		}
-		return
-	})
+	http.HandleFunc("/", server.Handler)
 
 	log.Printf("http://localhost:%s\n", port)
 
