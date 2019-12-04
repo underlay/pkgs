@@ -29,8 +29,8 @@ var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
 var packageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
-var extentIri = ld.NewIRI("http://www.w3.org/ns/prov#extent")
-var formatIri = ld.NewIRI("http://www.w3.org/ns/prov#format")
+var extentIri = ld.NewIRI("http://purl.org/dc/terms/extent")
+var formatIri = ld.NewIRI("http://purl.org/dc/terms/format")
 var createdIri = ld.NewIRI("http://purl.org/dc/terms/created")
 var modifiedIri = ld.NewIRI("http://purl.org/dc/terms/modified")
 var typeIri = ld.NewIRI(ld.RDFType)
@@ -60,7 +60,7 @@ func NewPackage(ctx context.Context, path, resource string, fs core.UnixfsAPI) (
 		Resource: resource,
 		Subject:  defaultSubject,
 		Value:    EmptyDirectoryCID.Bytes(),
-		Extent:   0,
+		Extent:   4,
 		Created:  dateTime,
 		Modified: dateTime,
 		Member:   make([]string, 0),
@@ -109,7 +109,7 @@ func (pkg *Package) Normalize(ctx context.Context, path string, fs core.UnixfsAP
 
 // NQuads converts the Package to a slice of ld.*Quads
 func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+7+len(pkg.Member)*2)
+	doc := make([]*ld.Quad, len(base), len(base)+5+len(pkg.Member)*2)
 	copy(doc, base)
 
 	c, err := cid.Cast(pkg.Value)
@@ -120,14 +120,12 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 	if err != nil {
 		return nil, err
 	}
-	value := fmt.Sprintf("dweb:/ipfs/%s", s)
+	value := ld.NewIRI(fmt.Sprintf("dweb:/ipfs/%s", s))
 	extent := strconv.FormatUint(pkg.Extent, 10)
 	doc = append(doc,
-		ld.NewQuad(subject, typeIri, packageIri, ""),
-		ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
 		ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(pkg.Resource), ""),
-		ld.NewQuad(subject, valueIri, ld.NewIRI(value), ""),
-		ld.NewQuad(subject, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
+		ld.NewQuad(subject, valueIri, value, ""),
+		ld.NewQuad(value, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
 		ld.NewQuad(subject, createdIri, ld.NewLiteral(pkg.Created, dateTime, ""), ""),
 		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(pkg.Modified, dateTime, ""), ""),
 	)
