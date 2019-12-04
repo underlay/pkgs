@@ -1,5 +1,25 @@
 # pkgs
 
+## Usage
+
+If you have a file `8-cell-orig.gif`, you can store it in your index package with:
+
+```
+% curl -i -X PUT -T 8-cell-orig.gif -H 'Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"' -H 'Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"' -H 'Content-Type: image/gif' http://localhost:8086/8-cell-orig.gif
+HTTP/1.1 100 Continue
+
+HTTP/1.1 200 OK
+Date: Wed, 04 Dec 2019 21:19:55 GMT
+Content-Length: 0
+
+```
+
+And then look at its properties with HEAD:
+
+```
+
+```
+
 ## Installation
 
 pkgs is a [go-ipfs plugin](https://github.com/ipfs/go-ipfs/blob/master/docs/plugins.md), which means the best way to use it is to build IPFS from source and follow the instructions for a preloaded plugin.

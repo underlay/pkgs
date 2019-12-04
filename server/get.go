@@ -15,6 +15,7 @@ import (
 	types "github.com/underlay/pkgs/types"
 )
 
+// Get handles HTTP GET requests
 func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
 	fs := api.Unixfs()
 	accept := req.Header.Get("Accept")
@@ -42,22 +43,24 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 
 	res.Header().Add("Link", linkTypeResource)
 
+	etag := resource.ETag()
+	c, s, err := types.GetCid(etag)
+	if err != nil {
+		res.WriteHeader(500)
+		return err
+	}
+
+	if ifNoneMatch == s {
+		res.WriteHeader(304)
+		return nil
+	}
+
+	res.Header().Add("ETag", s)
+
 	// Okay now we have a Resource and we get to respond with its representation
 	p, m, f := resource.GetPackage(), resource.GetMessage(), resource.GetFile()
 	if f != nil {
-		c, s, err := types.GetCid(f.Value)
-		if err != nil {
-			res.WriteHeader(500)
-			return err
-		}
-
 		res.Header().Add("Link", linkTypeNonRDFSource)
-
-		if ifNoneMatch == s {
-			res.WriteHeader(304)
-			return nil
-		}
-
 		file, err := types.GetFile(ctx, c, fs)
 		if err != nil {
 			res.WriteHeader(502)
@@ -65,25 +68,11 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		}
 
 		extent := strconv.FormatUint(f.Extent, 10)
-		res.Header().Add("ETag", s)
 		res.Header().Add("Content-Type", f.Format)
 		res.Header().Add("Content-Length", extent)
 		_, _ = io.Copy(res, file)
 	} else if m != nil {
-		c, s, err := types.GetCid(m)
-		if err != nil {
-			res.WriteHeader(500)
-			return err
-		}
-
 		res.Header().Add("Link", linkTypeNonRDFSource)
-		if ifNoneMatch == s {
-			res.WriteHeader(304)
-			return nil
-		}
-
-		res.Header().Add("ETag", s)
-
 		if accept == "application/n-quads" {
 			file, err := types.GetFile(ctx, c, fs)
 			if err != nil {
@@ -116,21 +105,7 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			return nil
 		}
 	} else if p != nil {
-		c, s, err := types.GetCid(p.Id)
-		if err != nil {
-			res.WriteHeader(500)
-			return err
-		}
-
 		res.Header().Add("Link", linkTypeDirectContainer)
-
-		if ifNoneMatch == s {
-			res.WriteHeader(304)
-			return nil
-		}
-
-		res.Header().Add("ETag", s)
-
 		if accept != "application/n-quads" && accept != "application/ld+json" {
 			res.WriteHeader(406)
 			return nil

@@ -27,6 +27,7 @@ var proc = ld.NewJsonLdProcessor()
 
 var debug = true
 
+// Handler handles HTTP requests using the database and core API
 func Handler(res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) {
 	var err error
 	ctx := context.TODO()
@@ -38,6 +39,13 @@ func Handler(res http.ResponseWriter, req *http.Request, db *badger.DB, api core
 		err = Head(ctx, res, req, db, api)
 	} else if req.Method == "DELETE" {
 	} else if req.Method == "OPTIONS" {
+	} else if req.Method == "COPY" {
+	} else if req.Method == "LOCK" {
+	} else if req.Method == "MKCOL" {
+	} else if req.Method == "MOVE" {
+	} else if req.Method == "PROPFIND" {
+	} else if req.Method == "PROPPATCH" {
+	} else if req.Method == "UNLOCK" {
 	}
 
 	if err != nil {

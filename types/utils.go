@@ -12,6 +12,18 @@ import (
 	multibase "github.com/multiformats/go-multibase"
 )
 
+func (r *Resource) ETag() (etag []byte) {
+	p, m, f := r.GetPackage(), r.GetMessage(), r.GetFile()
+	if p != nil {
+		etag = p.Id
+	} else if m != nil {
+		etag = m
+	} else if f != nil {
+		etag = f.Value
+	}
+	return
+}
+
 func (r *Resource) Get(path string, txn *badger.Txn) error {
 	item, err := txn.Get([]byte(path))
 	if err != nil {

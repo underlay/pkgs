@@ -20,6 +20,7 @@ import (
 	types "github.com/underlay/pkgs/types"
 )
 
+// Put handles HTTP PUT requests
 func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
 	if debug {
 		log.Println("PUT:", req.URL.Path)
@@ -87,6 +88,8 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 	if debug {
 		log.Println("PUT: opening transaction")
 	}
+
+	ifMatch := req.Header.Get("If-Match")
 
 	return db.Update(func(txn *badger.Txn) error {
 		var parentPath string
@@ -231,15 +234,27 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			res.WriteHeader(500)
 			return err
 		} else {
+			// The resource already exists!
+			// Hmm...
+			// For now we can at least check the If-Match tag
+			if ifMatch != "" {
+				etag := resource.ETag()
+				_, s, err := types.GetCid(etag)
+				if err != nil {
+					res.WriteHeader(500)
+					return err
+				}
+
+				if s != ifMatch {
+					res.WriteHeader(416)
+					return nil
+				}
+			}
 			// Something about unpinning its dependencies...
 			// TODO think about diffing
 			if debug {
 				log.Println("PUT: updating existing resource")
 			}
-		}
-
-		if debug {
-			log.Println("PUT: setting resource")
 		}
 
 		// Leaf has been pinned to IPFS directly, so what we really want is to unpin it afterwards
