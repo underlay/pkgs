@@ -131,7 +131,12 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 	)
 
 	for _, name := range pkg.Member {
-		key := fmt.Sprintf("%s/%s", path, name)
+		var key string
+		if path == "/" {
+			key = "/" + name
+		} else {
+			key = fmt.Sprintf("%s/%s", path, name)
+		}
 		item, err := txn.Get([]byte(key))
 		if err != nil {
 			return nil, err

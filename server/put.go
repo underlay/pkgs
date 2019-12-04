@@ -3,12 +3,12 @@ package server
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	files "github.com/ipfs/go-ipfs-files"
 	core "github.com/ipfs/interface-go-ipfs-core"
@@ -21,6 +21,10 @@ import (
 )
 
 func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
+	if debug {
+		log.Println("PUT:", req.URL.Path)
+	}
+
 	fs, object, pin := api.Unixfs(), api.Object(), api.Pin()
 	contentType := req.Header.Get("Content-Type")
 	if contentType == "" || len(req.Header["Content-Type"]) != 1 {
@@ -58,6 +62,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		}
 	}
 
+	if debug {
+		log.Println("PUT:", linkType)
+	}
+
 	pathname := req.URL.Path
 
 	// We have to do some smart diffing here :-/
@@ -74,6 +82,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 	if !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
+	}
+
+	if debug {
+		log.Println("PUT: opening transaction")
 	}
 
 	return db.Update(func(txn *badger.Txn) error {
@@ -107,17 +119,20 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		}
 
 		var leaf cid.Cid
-		key := []byte(pathname)
-		item, err := txn.Get(key)
+		resource := &types.Resource{}
+		err = resource.Get(pathname, txn)
 		if err == badger.ErrKeyNotFound {
 			// Okay so parent is an existing package and this is a new
 			// route beneath it, with link type linkType.
+
+			if debug {
+				log.Println("PUT: creating new resource")
+			}
 
 			// It's safe to start mutating p because it we encouter
 			// errors we'll return before we write it back to the database
 			p.Member = append(p.Member, name)
 
-			resource := &types.Resource{}
 			if linkType == linkTypeNonRDFSource {
 				// New file!
 
@@ -135,6 +150,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 				}
 
 				leaf = resolved.Cid()
+
+				if debug {
+					log.Println("PUT: new file with CID", leaf.String())
+				}
 
 				stat, err := object.Stat(ctx, resolved)
 				if err != nil {
@@ -198,35 +217,29 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 				return nil
 			}
 
-			val, err := proto.Marshal(resource)
+			err = resource.Set(pathname, txn)
+
+			if debug {
+				log.Println("PUT: set resource", pathname, err)
+			}
+
 			if err != nil {
 				res.WriteHeader(500)
 				return err
 			}
-
-			err = txn.Set(key, val)
-			if err != nil {
-				res.WriteHeader(500)
-				return err
-			}
-
-			// Wow! We've written a new key path with the created resource.
-			// And we've appended its name to its parent Package instance p,
-			// but we haven't written it back yet. Before we do, we need to
-			// patch its value object in IPFS with the new link :-)
-
 		} else if err != nil {
 			res.WriteHeader(500)
 			return err
 		} else {
-			resource := &types.Resource{}
-			err = item.Value(func(val []byte) error {
-				return proto.Unmarshal(val, resource)
-			})
-			if err != nil {
-				res.WriteHeader(500)
-				return err
+			// Something about unpinning its dependencies...
+			// TODO think about diffing
+			if debug {
+				log.Println("PUT: updating existing resource")
 			}
+		}
+
+		if debug {
+			log.Println("PUT: setting resource")
 		}
 
 		// Leaf has been pinned to IPFS directly, so what we really want is to unpin it afterwards
@@ -241,6 +254,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			return err
 		}
 
+		if debug {
+			log.Println("PUT: percolating merkle tree", parentPath, name)
+		}
+
 		err = percolate(ctx,
 			parentPath,
 			path.IpfsPath(parentID),
@@ -250,6 +267,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		)
 
 		if err != nil {
+			if debug {
+				log.Println("PUT: error percolating", err)
+			}
+
 			res.WriteHeader(500)
 			return err
 		}
@@ -282,15 +303,27 @@ func percolate(
 		// First patch the parent's value directory object
 		value, err = object.AddLink(ctx, parentValue, name, value)
 		if err != nil {
+			if debug {
+				log.Println("PUT: error patching parent value link", name)
+			}
 			return err
 		}
 
+		stat, err := object.Stat(ctx, value)
+		if err != nil {
+			return err
+		}
+
+		parent.Extent = uint64(stat.CumulativeSize)
 		parent.Value = value.Cid().Bytes()
 		parent.Modified = time.Now().Format(time.RFC3339)
 
 		// Now that parent.Value has changed, we need to re-normalize
 		id, err := parent.Normalize(ctx, parentPath, fs, txn)
 		if err != nil {
+			if debug {
+				log.Println("PUT: error normalizing parent", parentPath)
+			}
 			return err
 		}
 
@@ -298,6 +331,9 @@ func percolate(
 		r.Resource = &types.Resource_Package{Package: parent}
 		err = r.Set(parentPath, txn)
 		if err != nil {
+			if debug {
+				log.Println("PUT: error setting resource", parentPath)
+			}
 			return err
 		}
 
@@ -312,11 +348,17 @@ func percolate(
 			unpin := s != types.EmptyDirectory
 			err = pin.Update(ctx, parentValue, value, options.Pin.Unpin(unpin))
 			if err != nil {
+				if debug {
+					log.Println("PUT: error updating parent value pin", s)
+				}
 				return err
 			}
 
 			err = pin.Update(ctx, parentID, next, options.Pin.Unpin(true))
 			if err != nil {
+				if debug {
+					log.Println("PUT: error updating parent value pin", next.Cid().String())
+				}
 				return err
 			}
 
@@ -332,6 +374,9 @@ func percolate(
 		resource := &types.Resource{}
 		err = resource.Get(parentPath, txn)
 		if err != nil {
+			if debug {
+				log.Println("PUT: error getting resource", parentPath)
+			}
 			return err
 		}
 
@@ -350,6 +395,9 @@ func percolate(
 		parentValue = path.IpfsPath(parentValueCid)
 		parentValue, err = object.AddLink(ctx, parentValue, fmt.Sprintf("%s.nt", name), parentID)
 		if err != nil {
+			if debug {
+				log.Println("PUT: error patching ID link", name, parentID.Cid().String())
+			}
 			return err
 		}
 	}

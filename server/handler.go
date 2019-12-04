@@ -25,6 +25,8 @@ var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
 var proc = ld.NewJsonLdProcessor()
 
+var debug = true
+
 func Handler(res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) {
 	var err error
 	ctx := context.TODO()
@@ -40,6 +42,7 @@ func Handler(res http.ResponseWriter, req *http.Request, db *badger.DB, api core
 
 	if err != nil {
 		res.Write([]byte(err.Error()))
+		res.Write([]byte("\n"))
 	}
 	return
 }
