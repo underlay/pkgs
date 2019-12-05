@@ -22,6 +22,10 @@ And then look at its properties with HEAD:
 
 ## Installation
 
+### Building as an HTTP API client
+
+### Building as a plugin
+
 pkgs is a [go-ipfs plugin](https://github.com/ipfs/go-ipfs/blob/master/docs/plugins.md), which means the best way to use it is to build IPFS from source and follow the instructions for a preloaded plugin.
 
 You'll have to do some `go.mod` edits to get everything to compile.

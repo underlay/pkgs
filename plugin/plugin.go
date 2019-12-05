@@ -11,7 +11,6 @@ import (
 	plugin "github.com/ipfs/go-ipfs/plugin"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	multibase "github.com/multiformats/go-multibase"
 
 	server "github.com/underlay/pkgs/server"
 	types "github.com/underlay/pkgs/types"
@@ -68,20 +67,8 @@ func (sp *PkgsPlugin) listen() {
 // Start gets passed a CoreAPI instance, satisfying the plugin.PluginDaemon interface.
 func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 	log.Println("Starting pkgs plugin")
-
-	var err error
-
-	opts := badger.DefaultOptions(pkgsPath)
-
-	sp.db, err = badger.Open(opts)
-	if err != nil {
-		return err
-	}
-
-	fs, pin := api.Unixfs(), api.Pin()
-
 	ctx := context.Background()
-	err = pin.Add(ctx, path.IpfsPath(types.EmptyDirectoryCID))
+	err := api.Pin().Add(ctx, path.IpfsPath(types.EmptyDirectoryCID))
 	if err != nil {
 		return err
 	}
@@ -96,43 +83,10 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 
 	resource := fmt.Sprintf("%s/%s", origin, name)
 
-	index := "/"
-
-	var root string
-	err = sp.db.Update(func(txn *badger.Txn) error {
-		r := &types.Resource{}
-		err := r.Get(index, txn)
-		if err == badger.ErrKeyNotFound {
-			c, p, err := types.NewPackage(ctx, index, resource, fs)
-			if err != nil {
-				return err
-			}
-
-			root, err = c.StringOfBase(multibase.Base32)
-			if err != nil {
-				return err
-			}
-
-			r.Resource = &types.Resource_Package{Package: p}
-			return r.Set(index, txn)
-		} else if err != nil {
-			return err
-		}
-
-		pkg := r.GetPackage()
-		if pkg == nil {
-			return fmt.Errorf("Invalid index: %v", r)
-		}
-
-		_, root, err = types.GetCid(pkg.Id)
-		return err
-	})
-
+	sp.db, err = server.Initialize(ctx, pkgsPath, resource, api)
 	if err != nil {
 		return err
 	}
-
-	log.Println("pkgs root:", root)
 
 	sp.srv = &http.Server{Addr: ":8086"}
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {

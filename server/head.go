@@ -76,5 +76,7 @@ func Head(ctx context.Context, res http.ResponseWriter, req *http.Request, db *b
 			res.WriteHeader(406)
 		}
 	}
+
+	res.Write(nil)
 	return nil
 }
