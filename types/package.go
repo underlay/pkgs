@@ -20,10 +20,15 @@ import (
 )
 
 const defaultSubject = "_:c14n0"
+
+// EmptyDirectory is the CIDv1 of the empty directory
+// By default, IPFS nodes only pin the CIDv0 empty directory,
+// so we pin the v1 maually on initialization.
 const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
 
 const dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 
+// EmptyDirectoryCID is the CID instance of EmptyDirectory
 var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
 
 var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
@@ -49,6 +54,8 @@ var base = []*ld.Quad{
 	ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
 }
 
+// NewPackage creates and new timestamped package.
+// It pints it to IPFS but does *not* write to the database.
 func NewPackage(ctx context.Context, pathname, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
 	dateTime := time.Now().Format(time.RFC3339)
 
@@ -66,8 +73,10 @@ func NewPackage(ctx context.Context, pathname, resource string, fs core.UnixfsAP
 	return c, pkg, err
 }
 
+// ErrNotPackage is returned when a resource unmarhsalls into a non-package unexpectedly
 var ErrNotPackage = fmt.Errorf("Unexpected non-package resource")
 
+// GetPackage is a convenience method for retriving a package instance from the database
 func GetPackage(pathname string, txn *badger.Txn) (*Package, error) {
 	r := &Resource{}
 	err := r.Get(pathname, txn)
@@ -81,12 +90,16 @@ func GetPackage(pathname string, txn *badger.Txn) (*Package, error) {
 	return p, nil
 }
 
+// Set writes the package back to the database.
+// It does *not* normalize it; you have to do that yourself.
 func (pkg *Package) Set(pathname string, txn *badger.Txn) error {
 	r := &Resource{}
 	r.Resource = &Resource_Package{Package: pkg}
 	return r.Set(pathname, txn)
 }
 
+// Paths is a convenience method for getting the path.Resolved version
+// of a packages ID and Value CIDs at the same time.
 func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
 	id, err := cid.Cast(pkg.Id)
 	if err != nil {
@@ -223,77 +236,4 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 	}
 
 	return doc, nil
-}
-
-// JSON converts the Package to a JSON-LD document
-func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, error) {
-	members := make([]map[string]interface{}, 0, len(pkg.Member))
-
-	for _, name := range pkg.Member {
-		key := fmt.Sprintf("%s/%s", path, name)
-		item, err := txn.Get([]byte(key))
-		if err != nil {
-			return nil, err
-		}
-		resource := &Resource{}
-		err = item.Value(func(val []byte) error {
-			return proto.Unmarshal(val, resource)
-		})
-		if err != nil {
-			return nil, err
-		}
-		p, m, f := resource.GetPackage(), resource.GetMessage(), resource.GetFile()
-		if p != nil {
-			members = append(members, map[string]interface{}{
-				"@id":                    fmt.Sprintf("ul:/ipfs/%s#%s", p.Id, p.Subject),
-				"ldp:membershipResource": p.Resource,
-			})
-		} else if m != nil {
-			_, s, err := GetCid(m)
-			if err != nil {
-				return nil, err
-			}
-			member := map[string]interface{}{"@id": "ul:/ipfs/" + s}
-			if name != s {
-				member["ldp:membershipResource"] = fmt.Sprintf("%s/%s", pkg.Resource, name)
-			}
-			members = append(members, member)
-		} else if f != nil {
-			_, s, err := GetCid(f.Value)
-			if err != nil {
-				return nil, err
-			}
-
-			member := map[string]interface{}{
-				"@id":            "dweb:/ipfs/" + s,
-				"dcterms:extent": f.Extent,
-				"dcterms:format": f.Format,
-			}
-
-			if name != s {
-				member["ldp:membershipResource"] = fmt.Sprintf("%s/%s", pkg.Resource, name)
-			}
-
-			members = append(members, member)
-		}
-	}
-
-	_, s, err := GetCid(pkg.Value)
-	if err != nil {
-		return nil, err
-	}
-
-	return map[string]interface{}{
-		"@context":               ContextURL,
-		"@type":                  packageIri.Value,
-		"ldp:hasMemberRelation":  "prov:hadMember",
-		"ldp:membershipResource": pkg.Resource,
-		"dcterms:created":        pkg.Created,
-		"dcterms:modified":       pkg.Modified,
-		"prov:value": map[string]interface{}{
-			"@id":            fmt.Sprintf("dweb:/ipfs/%s", s),
-			"dcterms:extent": pkg.Extent,
-		},
-		"prov:hadMember": members,
-	}, nil
 }

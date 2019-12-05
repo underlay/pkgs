@@ -118,18 +118,26 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			}
 			_, _ = io.Copy(res, file)
 		} else if accept == "application/ld+json" {
-			var doc map[string]interface{}
-			err = db.View(func(txn *badger.Txn) (err error) {
-				doc, err = p.JSON(pathname, txn)
-				return
-			})
+			file, err := types.GetFile(ctx, c, fs)
+			if err != nil {
+				res.WriteHeader(502)
+				return err
+			}
 
+			doc, err := types.Proc.FromRDF(file, types.Opts)
 			if err != nil {
 				res.WriteHeader(500)
 				return err
 			}
 
-			_ = json.NewEncoder(res).Encode(doc)
+			framed, err := types.Proc.Frame(doc, types.PackageFrame, types.Opts)
+			if err != nil {
+				res.WriteHeader(500)
+				return err
+			}
+
+			framed["@context"] = types.ContextURL
+			_ = json.NewEncoder(res).Encode(framed)
 		}
 	}
 	return nil

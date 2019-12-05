@@ -13,6 +13,7 @@ import (
 	ld "github.com/piprate/json-gold/ld"
 )
 
+// ContextURL shouldn't be hardcoded; will factor out in the future
 const ContextURL = "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru"
 
 const rawContext = `{
@@ -43,9 +44,14 @@ var PackageFrame = map[string]interface{}{
 	"@type":    packageIri.Value,
 }
 
+// Proc is the multi-purpose JSON-LD processor we use for everything
 var Proc = ld.NewJsonLdProcessor()
+
+// Opts are the JSON-LD processing options we use for everything
 var Opts = ld.NewJsonLdOptions("")
 
+// ETag is a convenience function that multiplexes between Resource
+// types to return their CID as a string (ID for packages, not Value)
 func (r *Resource) ETag() (etag []byte) {
 	p, m, f := r.GetPackage(), r.GetMessage(), r.GetFile()
 	if p != nil {
@@ -58,6 +64,7 @@ func (r *Resource) ETag() (etag []byte) {
 	return
 }
 
+// Get unmarshalls a resource from the database
 func (r *Resource) Get(pathname string, txn *badger.Txn) error {
 	item, err := txn.Get([]byte(pathname))
 	if err != nil {
@@ -69,6 +76,7 @@ func (r *Resource) Get(pathname string, txn *badger.Txn) error {
 	})
 }
 
+// Set marshalls a resource and writes it to the database
 func (r *Resource) Set(pathname string, txn *badger.Txn) error {
 	val, err := proto.Marshal(r)
 	if err != nil {
@@ -78,6 +86,8 @@ func (r *Resource) Set(pathname string, txn *badger.Txn) error {
 	return txn.Set([]byte(pathname), val)
 }
 
+// GetCid is a convenience method for turning byte slices
+// into CID strings and instances at the same time.
 func GetCid(val []byte) (cid.Cid, string, error) {
 	c, err := cid.Cast(val)
 	if err != nil {
@@ -92,6 +102,7 @@ func GetCid(val []byte) (cid.Cid, string, error) {
 	return c, s, nil
 }
 
+// GetFile Do we use this?
 func GetFile(ctx context.Context, c cid.Cid, fs core.UnixfsAPI) (files.File, error) {
 	node, err := fs.Get(ctx, path.IpfsPath(c))
 	if err != nil {

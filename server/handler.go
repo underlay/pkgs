@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -30,10 +29,9 @@ var linkTypes = map[string]bool{
 
 var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
-var debug = true
-
 var index = "/"
 
+// Initialize opens the Badger database and writes an empty root package if none exists
 func Initialize(ctx context.Context, p, resource string, api core.CoreAPI) (*badger.DB, error) {
 	opts := badger.DefaultOptions(p)
 	db, err := badger.Open(opts)
@@ -134,9 +132,6 @@ func percolate(
 		// Now that parent.Value has changed, we need to re-normalize
 		id, err := parent.Normalize(ctx, parentPath, fs, txn)
 		if err != nil {
-			if debug {
-				log.Println("PUT: error normalizing parent", parentPath)
-			}
 			return err
 		}
 

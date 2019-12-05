@@ -44,6 +44,7 @@ func main() {
 	types.Opts.Format = "application/n-quads"
 	types.Opts.CompactArrays = true
 	types.Opts.UseNativeTypes = true
+	types.Opts.OmitGraph = true
 
 	ctx := context.Background()
 	if pkgsName == "" {

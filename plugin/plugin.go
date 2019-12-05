@@ -92,6 +92,7 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 	types.Opts.DocumentLoader = loader.NewDwebDocumentLoader(api)
 	types.Opts.Format = "application/n-quads"
 	types.Opts.CompactArrays = true
+	types.Opts.UseNativeTypes = true
 
 	sp.srv = &http.Server{Addr: ":8086"}
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
