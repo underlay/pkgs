@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
 	cid "github.com/ipfs/go-cid"
@@ -17,7 +16,7 @@ import (
 
 // Delete handles HTTP DELETE requests
 func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
-	object := api.Object()
+	fs, pin, object := api.Unixfs(), api.Pin(), api.Object()
 
 	pathname := req.URL.Path
 	if pathname == "/" {
@@ -96,7 +95,14 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 			return err
 		}
 
-		next, err := object.RmLink(ctx, path.IpfsPath(c), name)
+		id, err := cid.Cast(parent.Id)
+		if err != nil {
+			res.WriteHeader(500)
+			return err
+		}
+
+		parentValue := path.IpfsPath(c)
+		parentValue, err = object.RmLink(ctx, parentValue, name)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -104,24 +110,27 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 
 		// Also remove the direct object for packages
 		if r.GetPackage() != nil {
-			next, err = object.RmLink(ctx, next, fmt.Sprintf("%s.nt", name))
+			parentValue, err = object.RmLink(ctx, parentValue, fmt.Sprintf("%s.nt", name))
 			if err != nil {
 				res.WriteHeader(500)
 				return err
 			}
 		}
 
-		stat, err := object.Stat(ctx, next)
+		err = percolate(
+			ctx,
+			parentPath,
+			path.IpfsPath(id),
+			parentValue,
+			parent,
+			name, nil,
+			txn, fs, object, pin,
+		)
+
 		if err != nil {
 			res.WriteHeader(500)
 			return err
 		}
-
-		parent.Extent = uint64(stat.CumulativeSize)
-		parent.Value = next.Cid().Bytes()
-		parent.Modified = time.Now().Format(time.RFC3339)
-
-		res.WriteHeader(501)
 
 		res.Write(nil)
 		return nil

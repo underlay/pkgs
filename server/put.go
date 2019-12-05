@@ -258,7 +258,7 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		}
 
 		// Leaf has been pinned to IPFS directly, so what we really want is to unpin it afterwards
-		from := path.IpfsPath(leaf)
+		leafPath := path.IpfsPath(leaf)
 		parentValue, err := cid.Cast(p.Value)
 		if err != nil {
 			return err
@@ -277,7 +277,7 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			parentPath,
 			path.IpfsPath(parentID),
 			path.IpfsPath(parentValue),
-			p, name, from,
+			p, name, leafPath,
 			txn, fs, object, pin,
 		)
 
@@ -290,7 +290,7 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			return err
 		}
 
-		err = pin.Rm(ctx, from, options.Pin.RmRecursive(true))
+		err = pin.Rm(ctx, leafPath, options.Pin.RmRecursive(true))
 		if err != nil {
 			res.WriteHeader(500)
 			return err

@@ -119,12 +119,16 @@ func percolate(
 	modified := time.Now().Format(time.RFC3339)
 	for {
 		// First patch the parent's value directory object
-		value, err = object.AddLink(ctx, parentValue, name, value)
-		if err != nil {
-			if debug {
-				log.Println("PUT: error patching parent value link", name)
+		if value != nil {
+			value, err = object.AddLink(ctx, parentValue, name, value)
+			if err != nil {
+				if debug {
+					log.Println("PUT: error patching parent value link", name)
+				}
+				return err
 			}
-			return err
+		} else {
+			value = parentValue
 		}
 
 		stat, err := object.Stat(ctx, value)
