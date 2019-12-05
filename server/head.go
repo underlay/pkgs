@@ -14,8 +14,8 @@ import (
 
 // Head handles HTTP HEAD requests
 func Head(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
-	path := req.URL.Path
-	if path != "/" && !pathRegex.MatchString(path) {
+	pathname := req.URL.Path
+	if pathname != "/" && !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}
@@ -26,7 +26,7 @@ func Head(ctx context.Context, res http.ResponseWriter, req *http.Request, db *b
 	resource := &types.Resource{}
 
 	err := db.View(func(txn *badger.Txn) error {
-		return resource.Get(path, txn)
+		return resource.Get(pathname, txn)
 	})
 
 	if err == badger.ErrKeyNotFound {

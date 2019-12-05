@@ -11,6 +11,7 @@ import (
 	plugin "github.com/ipfs/go-ipfs/plugin"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
+	loader "github.com/underlay/go-dweb-loader/loader"
 
 	server "github.com/underlay/pkgs/server"
 	types "github.com/underlay/pkgs/types"
@@ -87,6 +88,10 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 	if err != nil {
 		return err
 	}
+
+	types.Opts.DocumentLoader = loader.NewDwebDocumentLoader(api)
+	types.Opts.Format = "application/n-quads"
+	types.Opts.CompactArrays = true
 
 	sp.srv = &http.Server{Addr: ":8086"}
 	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {

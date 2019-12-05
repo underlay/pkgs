@@ -9,9 +9,10 @@ import (
 	"regexp"
 
 	ipfs "github.com/ipfs/go-ipfs-http-client"
-	ld "github.com/piprate/json-gold/ld"
+	loader "github.com/underlay/go-dweb-loader/loader"
 
 	server "github.com/underlay/pkgs/server"
+	types "github.com/underlay/pkgs/types"
 )
 
 const defaultHost = "http://localhost:5001"
@@ -23,8 +24,6 @@ var pkgsName = os.Getenv("PKGS_NAME")
 var pkgsOrigin = os.Getenv("PKGS_ORIGIN")
 
 var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
-
-var proc = ld.NewJsonLdProcessor()
 
 func main() {
 	if pkgsOrigin == "" {
@@ -41,8 +40,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background()
+	types.Opts.DocumentLoader = loader.NewDwebDocumentLoader(api)
+	types.Opts.Format = "application/n-quads"
+	types.Opts.CompactArrays = true
+	types.Opts.UseNativeTypes = true
 
+	ctx := context.Background()
 	if pkgsName == "" {
 		key, err := api.Key().Self(ctx)
 		if err != nil {

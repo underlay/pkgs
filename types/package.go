@@ -14,6 +14,7 @@ import (
 	files "github.com/ipfs/go-ipfs-files"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
+	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 )
@@ -48,12 +49,7 @@ var base = []*ld.Quad{
 	ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
 }
 
-type Pkgs interface {
-	DB() *badger.DB
-	API() core.CoreAPI
-}
-
-func NewPackage(ctx context.Context, path, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
+func NewPackage(ctx context.Context, pathname, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
 	dateTime := time.Now().Format(time.RFC3339)
 
 	pkg := &Package{
@@ -66,8 +62,41 @@ func NewPackage(ctx context.Context, path, resource string, fs core.UnixfsAPI) (
 		Member:   make([]string, 0),
 	}
 
-	c, err := pkg.Normalize(ctx, path, fs, nil)
+	c, err := pkg.Normalize(ctx, pathname, fs, nil)
 	return c, pkg, err
+}
+
+var ErrNotPackage = fmt.Errorf("Unexpected non-package resource")
+
+func GetPackage(pathname string, txn *badger.Txn) (*Package, error) {
+	r := &Resource{}
+	err := r.Get(pathname, txn)
+	if err != nil {
+		return nil, err
+	}
+	p := r.GetPackage()
+	if p == nil {
+		return nil, ErrNotPackage
+	}
+	return p, nil
+}
+
+func (pkg *Package) Set(pathname string, txn *badger.Txn) error {
+	r := &Resource{}
+	r.Resource = &Resource_Package{Package: pkg}
+	return r.Set(pathname, txn)
+}
+
+func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
+	id, err := cid.Cast(pkg.Id)
+	if err != nil {
+		return nil, nil, err
+	}
+	value, err := cid.Cast(pkg.Value)
+	if err != nil {
+		return nil, nil, err
+	}
+	return path.IpfsPath(id), path.IpfsPath(value), nil
 }
 
 // Normalize re-computes the normalized n-quads representation of the package,
@@ -81,10 +110,8 @@ func (pkg *Package) Normalize(ctx context.Context, path string, fs core.UnixfsAP
 	}
 
 	api := ld.NewJsonLdApi()
-	opts := ld.NewJsonLdOptions("")
-	opts.Format = "application/n-quads"
 	var res interface{}
-	res, err = api.Normalize(ds, opts)
+	res, err = api.Normalize(ds, Opts)
 	if err != nil {
 		return
 	}
@@ -108,7 +135,7 @@ func (pkg *Package) Normalize(ctx context.Context, path string, fs core.UnixfsAP
 }
 
 // NQuads converts the Package to a slice of ld.*Quads
-func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
+func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	doc := make([]*ld.Quad, len(base), len(base)+5+len(pkg.Member)*2)
 	copy(doc, base)
 
@@ -132,10 +159,10 @@ func (pkg *Package) NQuads(path string, txn *badger.Txn) ([]*ld.Quad, error) {
 
 	for _, name := range pkg.Member {
 		var key string
-		if path == "/" {
+		if pathname == "/" {
 			key = "/" + name
 		} else {
-			key = fmt.Sprintf("%s/%s", path, name)
+			key = fmt.Sprintf("%s/%s", pathname, name)
 		}
 		item, err := txn.Get([]byte(key))
 		if err != nil {
@@ -257,7 +284,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 	}
 
 	return map[string]interface{}{
-		"@context":               contextURL,
+		"@context":               ContextURL,
 		"@type":                  packageIri.Value,
 		"ldp:hasMemberRelation":  "prov:hadMember",
 		"ldp:membershipResource": pkg.Resource,
@@ -265,7 +292,7 @@ func (pkg *Package) JSON(path string, txn *badger.Txn) (map[string]interface{}, 
 		"dcterms:modified":       pkg.Modified,
 		"prov:value": map[string]interface{}{
 			"@id":            fmt.Sprintf("dweb:/ipfs/%s", s),
-			"dcterms:extent": strconv.FormatUint(pkg.Extent, 10),
+			"dcterms:extent": pkg.Extent,
 		},
 		"prov:hadMember": members,
 	}, nil

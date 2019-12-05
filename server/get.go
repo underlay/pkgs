@@ -10,7 +10,6 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 	core "github.com/ipfs/interface-go-ipfs-core"
-	ld "github.com/piprate/json-gold/ld"
 
 	types "github.com/underlay/pkgs/types"
 )
@@ -21,16 +20,16 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 	accept := req.Header.Get("Accept")
 	ifNoneMatch := req.Header.Get("If-None-Match")
 
-	path := req.URL.Path
+	pathname := req.URL.Path
 
-	if path != "/" && !pathRegex.MatchString(path) {
+	if pathname != "/" && !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}
 
 	resource := &types.Resource{}
 	err := db.View(func(txn *badger.Txn) error {
-		return resource.Get(path, txn)
+		return resource.Get(pathname, txn)
 	})
 
 	if err == badger.ErrKeyNotFound {
@@ -89,10 +88,7 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 				return err
 			}
 
-			opts := ld.NewJsonLdOptions("")
-			opts.Format = "application/n-quads"
-
-			doc, err := proc.FromRDF(file, opts)
+			doc, err := types.Proc.FromRDF(file, types.Opts)
 			if err != nil {
 				res.WriteHeader(500)
 				return err
@@ -114,19 +110,20 @@ func Get(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
 		res.Header().Add("Content-Type", accept)
 
-		file, err := types.GetFile(ctx, c, fs)
-		if err != nil {
-			res.WriteHeader(502)
-			return err
-		}
-
 		if accept == "application/n-quads" {
+			file, err := types.GetFile(ctx, c, fs)
+			if err != nil {
+				res.WriteHeader(502)
+				return err
+			}
 			_, _ = io.Copy(res, file)
 		} else if accept == "application/ld+json" {
-			opts := ld.NewJsonLdOptions("")
-			opts.Format = "application/n-quads"
+			var doc map[string]interface{}
+			err = db.View(func(txn *badger.Txn) (err error) {
+				doc, err = p.JSON(pathname, txn)
+				return
+			})
 
-			doc, err := proc.FromRDF(file, opts)
 			if err != nil {
 				res.WriteHeader(500)
 				return err

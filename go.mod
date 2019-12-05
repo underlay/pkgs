@@ -13,4 +13,5 @@ require (
 	github.com/ipfs/interface-go-ipfs-core v0.2.5
 	github.com/multiformats/go-multibase v0.0.1
 	github.com/piprate/json-gold v0.2.0
+	github.com/underlay/go-dweb-loader v0.2.2
 )

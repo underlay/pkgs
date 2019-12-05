@@ -20,6 +20,48 @@ And then look at its properties with HEAD:
 
 ```
 
+### GET
+
+`GET` requests to a resource _require_ an explicit `Accpet` header of either `application/ld+json` or `application/n-quads`.
+
+```
+% curl -i -H 'Accept: application/n-quads' http://localhost:8086/
+HTTP/1.1 200 OK
+Content-Type: application/n-quads
+Etag: bafkreifjc7gebvrm3jbsdjobgpshcfo5twx2suyercykybcrvtwpy5angu
+Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"
+Link: <http://www.w3.org/ns/ldp#DirectContainer>; rel="type"
+Link: <#_:c14n0>; rel="self"
+Date: Thu, 05 Dec 2019 21:51:24 GMT
+Content-Length: 817
+
+<dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354> <http://purl.org/dc/terms/extent> "4"^^<http://www.w3.org/2001/XMLSchema#integer> .
+_:c14n0 <http://purl.org/dc/terms/created> "2019-12-05T10:00:22-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+_:c14n0 <http://purl.org/dc/terms/modified> "2019-12-05T10:00:22-05:00"^^<http://www.w3.org/2001/XMLSchema#dateTime> .
+_:c14n0 <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://underlay.mit.edu/ns#Package> .
+_:c14n0 <http://www.w3.org/ns/ldp#hasMemberRelation> <http://www.w3.org/ns/prov#hadMember> .
+_:c14n0 <http://www.w3.org/ns/ldp#membershipResource> <dweb:/ipns/QmXS2hw3KjFC19uSzYJwXn5Fp5GRjueEpBLyQheuSMLs1D> .
+_:c14n0 <http://www.w3.org/ns/prov#value> <dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354> .
+```
+
+Note the three `Link` response headers: the first declares that the URL is an LDP Resource, the second further specifies that the resource is a LDP Direct Container, and the last links to the local blank node that represents the URL in the attached RDF dataset.
+
+Requests at package paths with `Accept: application/ld+json` will be framed and compacted with a default package frame:
+
+```
+
+```
+
+### HEAD
+
+### POST
+
+### PUT
+
+### MKCOL
+
+### DELETE
+
 ## Installation
 
 ### Building as an HTTP API client

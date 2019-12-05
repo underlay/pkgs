@@ -10,12 +10,10 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	cid "github.com/ipfs/go-cid"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
-	ld "github.com/piprate/json-gold/ld"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -31,8 +29,6 @@ var linkTypes = map[string]bool{
 }
 
 var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
-
-var proc = ld.NewJsonLdProcessor()
 
 var debug = true
 
@@ -60,9 +56,8 @@ func Initialize(ctx context.Context, p, resource string, api core.CoreAPI) (*bad
 			return err
 		}
 
-		pkg := r.GetPackage()
-		if pkg == nil {
-			return fmt.Errorf("Invalid index: %v", r)
+		if r.GetPackage() == nil {
+			return types.ErrNotPackage
 		}
 
 		return err
@@ -111,20 +106,15 @@ func percolate(
 	name string,
 	value path.Resolved,
 	txn *badger.Txn,
-	fs core.UnixfsAPI,
-	object core.ObjectAPI,
-	pin core.PinAPI,
-) error {
-	var err error
+	api core.CoreAPI,
+) (err error) {
+	fs, object, pin := api.Unixfs(), api.Object(), api.Pin()
 	modified := time.Now().Format(time.RFC3339)
 	for {
 		// First patch the parent's value directory object
 		if value != nil {
 			value, err = object.AddLink(ctx, parentValue, name, value)
 			if err != nil {
-				if debug {
-					log.Println("PUT: error patching parent value link", name)
-				}
 				return err
 			}
 		} else {
@@ -139,6 +129,7 @@ func percolate(
 		parent.Extent = uint64(stat.CumulativeSize)
 		parent.Value = value.Cid().Bytes()
 		parent.Modified = modified
+		parent.RevisionOf = parent.Id
 
 		// Now that parent.Value has changed, we need to re-normalize
 		id, err := parent.Normalize(ctx, parentPath, fs, txn)
@@ -153,13 +144,10 @@ func percolate(
 		r.Resource = &types.Resource_Package{Package: parent}
 		err = r.Set(parentPath, txn)
 		if err != nil {
-			if debug {
-				log.Println("PUT: error setting resource", parentPath)
-			}
 			return err
 		}
 
-		next := path.IpfsPath(id)
+		nextID := path.IpfsPath(id)
 
 		if parentPath == "/" {
 			s, err := parentValue.Cid().StringOfBase(multibase.Base32)
@@ -170,56 +158,33 @@ func percolate(
 			unpin := s != types.EmptyDirectory
 			err = pin.Update(ctx, parentValue, value, options.Pin.Unpin(unpin))
 			if err != nil {
-				if debug {
-					log.Println("PUT: error updating parent value pin", s)
-				}
 				return err
 			}
 
-			err = pin.Update(ctx, parentID, next, options.Pin.Unpin(true))
+			err = pin.Update(ctx, parentID, nextID, options.Pin.Unpin(true))
 			if err != nil {
-				if debug {
-					log.Println("PUT: error updating parent value pin", next.Cid().String())
-				}
 				return err
 			}
 
 			return nil
 		}
 
-		parentID = next
-
 		tail := strings.LastIndex(parentPath, "/")
 		name = parentPath[tail+1:]
 		parentPath = parentPath[:tail]
 
-		resource := &types.Resource{}
-		err = resource.Get(parentPath, txn)
-		if err != nil {
-			if debug {
-				log.Println("PUT: error getting resource", parentPath)
-			}
-			return err
-		}
-
-		parent = resource.GetPackage()
-		if parent == nil {
-			return fmt.Errorf("Invalid parent resource: %v", r)
-		}
-
-		// Since there's another directory above this, we also need to patch
-		// *that* with the new package *id* under `name.nt` in the grandparent directory
-		parentValueCid, err := cid.Cast(parent.Value)
+		parent, err := types.GetPackage(parentPath, txn)
 		if err != nil {
 			return err
 		}
 
-		parentValue = path.IpfsPath(parentValueCid)
-		parentValue, err = object.AddLink(ctx, parentValue, fmt.Sprintf("%s.nt", name), parentID)
+		parentID, parentValue, err = parent.Paths()
 		if err != nil {
-			if debug {
-				log.Println("PUT: error patching ID link", name, parentID.Cid().String())
-			}
+			return err
+		}
+
+		parentValue, err = object.AddLink(ctx, parentValue, fmt.Sprintf("%s.nt", name), nextID)
+		if err != nil {
 			return err
 		}
 	}

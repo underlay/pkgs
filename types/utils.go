@@ -10,7 +10,41 @@ import (
 	core "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
+	ld "github.com/piprate/json-gold/ld"
 )
+
+const ContextURL = "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru"
+
+const rawContext = `{
+	"@context": {
+		"dcterms": "http://purl.org/dc/terms/",
+		"prov": "http://www.w3.org/ns/prov#",
+		"ldp": "http://www.w3.org/ns/ldp#",
+		"xsd": "http://www.w3.org/2001/XMLSchema#",
+		"dcterms:created": {
+			"@type": "xsd:dateTime"
+		},
+		"dcterms:modified": {
+			"@type": "xsd:dateTime"
+		},
+		"ldp:membershipResource": {
+			"@type": "@id"
+		},
+		"ldp:hasMemberRelation": {
+			"@type": "@id"
+		}
+	}
+}
+`
+
+// PackageFrame is the JSON-LD Frame used for framing packages
+var PackageFrame = map[string]interface{}{
+	"@context": ContextURL,
+	"@type":    packageIri.Value,
+}
+
+var Proc = ld.NewJsonLdProcessor()
+var Opts = ld.NewJsonLdOptions("")
 
 func (r *Resource) ETag() (etag []byte) {
 	p, m, f := r.GetPackage(), r.GetMessage(), r.GetFile()
@@ -24,8 +58,8 @@ func (r *Resource) ETag() (etag []byte) {
 	return
 }
 
-func (r *Resource) Get(path string, txn *badger.Txn) error {
-	item, err := txn.Get([]byte(path))
+func (r *Resource) Get(pathname string, txn *badger.Txn) error {
+	item, err := txn.Get([]byte(pathname))
 	if err != nil {
 		return err
 	}
@@ -35,13 +69,13 @@ func (r *Resource) Get(path string, txn *badger.Txn) error {
 	})
 }
 
-func (r *Resource) Set(path string, txn *badger.Txn) error {
+func (r *Resource) Set(pathname string, txn *badger.Txn) error {
 	val, err := proto.Marshal(r)
 	if err != nil {
 		return err
 	}
 
-	return txn.Set([]byte(path), val)
+	return txn.Set([]byte(pathname), val)
 }
 
 func GetCid(val []byte) (cid.Cid, string, error) {
