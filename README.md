@@ -1,31 +1,24 @@
 # pkgs
 
+pkgs is an [LDP Server](https://www.w3.org/TR/ldp/) with a [WebDAV](https://en.wikipedia.org/wiki/WebDAV) interface built on IPFS.
+
+"Directories" are called Packages, and they have a direct RDF representation as an LDP Direct Container and they contain members that can be RDF datasets, arbitrary files, or subpackages.
+
+All the RDF sources (packages and datasets) are stored as canonicalized n-quads files.
+
 ## Usage
 
-If you have a file `8-cell-orig.gif`, you can store it in your index package with:
+Some environment variables:
 
-```
-% curl -i -X PUT -T 8-cell-orig.gif -H 'Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"' -H 'Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"' -H 'Content-Type: image/gif' http://localhost:8086/8-cell-orig.gif
-HTTP/1.1 100 Continue
-
-HTTP/1.1 200 OK
-Date: Wed, 04 Dec 2019 21:19:55 GMT
-Content-Length: 0
-
-```
-
-And then look at its properties with HEAD:
-
-```
-
-```
+- `PKGS_PATH` (default `/tmp/pkgs`) is the directory that pkgs will open a [Badger](https://github.com/dgraph-io/badger) database in for caching the directory tree.
+- `PKGS_ROOT` (default `dweb:/ipns/Qm...`, where `Qm...` is the PeerID of the IPFS node) root for local URIs - root package `/` will be identified with it, and all other resources will be identified as paths relative it. Don't include a trailing slash.
 
 ### GET
 
 `GET` requests to a resource _require_ an explicit `Accpet` header of either `application/ld+json` or `application/n-quads`.
 
 ```
-% curl -i -H 'Accept: application/n-quads' http://localhost:8086/
+% curl -i -H 'Accept: application/n-quads' http://localhost:8086
 HTTP/1.1 200 OK
 Content-Type: application/n-quads
 Etag: bafkreifjc7gebvrm3jbsdjobgpshcfo5twx2suyercykybcrvtwpy5angu
@@ -141,6 +134,15 @@ Content-Length: 0
 ## Installation
 
 ### Building as an HTTP API client
+
+If you already have a local IPFS daemon, you can build pkgs as a standalone application:
+
+```
+% go build .
+% ./pkgs
+```
+
+This will interface with the IPFS daemon over its HTTP API, which is slower than the CoreAPI interface that plugins get, but is more convenient for debugging.
 
 ### Building as a plugin
 
