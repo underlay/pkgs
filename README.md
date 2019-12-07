@@ -15,7 +15,7 @@ Some environment variables:
 
 ### GET
 
-`GET` requests to a resource _require_ an explicit `Accpet` header of either `application/ld+json` or `application/n-quads`.
+`GET` requests to a resource _require_ an explicit `Accept` header of either `application/ld+json` or `application/n-quads`.
 
 ```
 % curl -i -H 'Accept: application/n-quads' http://localhost:8086
