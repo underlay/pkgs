@@ -5,13 +5,12 @@ import (
 	"net/http"
 
 	badger "github.com/dgraph-io/badger/v2"
-	core "github.com/ipfs/interface-go-ipfs-core"
 
 	types "github.com/underlay/pkgs/types"
 )
 
 // Post handles HTTP POST requests
-func Post(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
+func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	pathname := req.URL.Path
 	if pathname == "/" {
 		res.WriteHeader(403)
@@ -29,7 +28,7 @@ func Post(ctx context.Context, res http.ResponseWriter, req *http.Request, db *b
 	}
 
 	resource := &types.Resource{}
-	err := db.View(func(txn *badger.Txn) error {
+	err := server.db.View(func(txn *badger.Txn) error {
 		return resource.Get(pathname, txn)
 	})
 

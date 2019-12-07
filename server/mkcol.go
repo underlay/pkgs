@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
-	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 
@@ -15,8 +14,7 @@ import (
 )
 
 // Mkcol handles HTTP MKCOL requests
-func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
-	fs, pin := api.Unixfs(), api.Pin()
+func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	pathname := req.URL.Path
 	if pathname == "/" {
 		res.WriteHeader(403)
@@ -41,7 +39,7 @@ func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *
 		parentPath = "/"
 	}
 
-	return db.Update(func(txn *badger.Txn) error {
+	return server.db.Update(func(txn *badger.Txn) error {
 		parentResource := &types.Resource{}
 		err := parentResource.Get(parentPath, txn)
 		if err == badger.ErrKeyNotFound {
@@ -67,7 +65,8 @@ func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *
 		}
 
 		parent.Member = append(parent.Member, name)
-		c, p, err := types.NewPackage(ctx, pathname, fmt.Sprintf(""), fs)
+		p := types.NewPackage(ctx, pathname, fmt.Sprintf(""))
+		c, err := server.Normalize(ctx, pathname, p, false, nil)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -89,7 +88,7 @@ func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *
 
 		leaf := path.IpfsPath(c)
 
-		err = percolate(
+		err = server.percolate(
 			ctx,
 			parentPath,
 			parentID,
@@ -97,7 +96,7 @@ func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *
 			parent,
 			name,
 			leaf,
-			txn, api,
+			txn,
 		)
 
 		if err != nil {
@@ -105,7 +104,7 @@ func Mkcol(ctx context.Context, res http.ResponseWriter, req *http.Request, db *
 			return err
 		}
 
-		err = pin.Rm(ctx, leaf, options.Pin.RmRecursive(true))
+		err = server.pin.Rm(ctx, leaf, options.Pin.RmRecursive(true))
 		if err != nil {
 			res.WriteHeader(500)
 			return err

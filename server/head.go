@@ -7,25 +7,23 @@ import (
 	"strconv"
 
 	badger "github.com/dgraph-io/badger/v2"
-	core "github.com/ipfs/interface-go-ipfs-core"
 
 	types "github.com/underlay/pkgs/types"
 )
 
 // Head handles HTTP HEAD requests
-func Head(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
+func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	pathname := req.URL.Path
 	if pathname != "/" && !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}
 
-	accept := req.Header.Get("Accept")
 	ifNoneMatch := req.Header.Get("If-None-Match")
 
 	resource := &types.Resource{}
 
-	err := db.View(func(txn *badger.Txn) error {
+	err := server.db.View(func(txn *badger.Txn) error {
 		return resource.Get(pathname, txn)
 	})
 
@@ -61,20 +59,11 @@ func Head(ctx context.Context, res http.ResponseWriter, req *http.Request, db *b
 		res.Header().Add("Content-Type", f.Format)
 		res.Header().Add("Content-Length", extent)
 	} else if m != nil {
-		if accept == "application/n-quads" || accept == "application/ld+json" {
-			res.Header().Add("Link", linkTypeRDFSource)
-			res.Header().Add("Content-Type", accept)
-		} else {
-			res.WriteHeader(406)
-			return nil
-		}
+		res.Header().Add("Link", linkTypeRDFSource)
+		res.Header().Add("Content-Type", "application/n-quads")
 	} else if p != nil {
-		if accept == "application/n-quads" || accept == "application/ld+json" {
-			res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
-			res.Header().Add("Content-Type", accept)
-		} else {
-			res.WriteHeader(406)
-		}
+		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
+		res.Header().Add("Content-Type", "application/n-quads")
 	}
 
 	res.Write(nil)

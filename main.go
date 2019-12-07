@@ -9,10 +9,8 @@ import (
 	"regexp"
 
 	ipfs "github.com/ipfs/go-ipfs-http-client"
-	loader "github.com/underlay/go-dweb-loader/loader"
 
-	server "github.com/underlay/pkgs/server"
-	types "github.com/underlay/pkgs/types"
+	pkgs "github.com/underlay/pkgs/server"
 )
 
 const defaultHost = "http://localhost:5001"
@@ -40,12 +38,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	types.Opts.DocumentLoader = loader.NewDwebDocumentLoader(api)
-	types.Opts.Format = "application/n-quads"
-	types.Opts.CompactArrays = true
-	types.Opts.UseNativeTypes = true
-	types.Opts.OmitGraph = true
-
 	ctx := context.Background()
 	if pkgsName == "" {
 		key, err := api.Key().Self(ctx)
@@ -61,17 +53,13 @@ func main() {
 		pkgsPath = "/tmp/pkgs"
 	}
 
-	db, err := server.Initialize(ctx, pkgsPath, resource, api)
+	server, err := pkgs.Initialize(ctx, pkgsPath, resource, api)
 
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		server.Handler(res, req, db, api)
-	})
-
+	http.HandleFunc("/", server.Handle)
 	log.Printf("http://localhost:8086\n")
-
 	log.Fatal(http.ListenAndServe(":8086", nil))
 }

@@ -11,9 +11,8 @@ import (
 	plugin "github.com/ipfs/go-ipfs/plugin"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	loader "github.com/underlay/go-dweb-loader/loader"
 
-	server "github.com/underlay/pkgs/server"
+	pkgs "github.com/underlay/pkgs/server"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -84,20 +83,13 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 
 	resource := fmt.Sprintf("%s/%s", origin, name)
 
-	sp.db, err = server.Initialize(ctx, pkgsPath, resource, api)
+	server, err := pkgs.Initialize(ctx, pkgsPath, resource, api)
 	if err != nil {
 		return err
 	}
 
-	types.Opts.DocumentLoader = loader.NewDwebDocumentLoader(api)
-	types.Opts.Format = "application/n-quads"
-	types.Opts.CompactArrays = true
-	types.Opts.UseNativeTypes = true
-
 	sp.srv = &http.Server{Addr: ":8086"}
-	http.HandleFunc("/", func(res http.ResponseWriter, req *http.Request) {
-		server.Handler(res, req, sp.db, api)
-	})
+	http.HandleFunc("/", server.Handle)
 	go sp.listen()
 	return nil
 }
@@ -105,7 +97,14 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 // Close gets called when the IPFS deamon shuts down, satisfying the plugin.PluginDaemon interface.
 func (sp *PkgsPlugin) Close() error {
 	if sp.srv != nil {
-		return sp.srv.Shutdown(context.TODO())
+		err := sp.srv.Shutdown(context.TODO())
+		if err != nil {
+			log.Println(err)
+		}
+	}
+	err := sp.db.Close()
+	if err != nil {
+		log.Println(err)
 	}
 	return nil
 }

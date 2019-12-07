@@ -49,18 +49,94 @@ Note the three `Link` response headers: the first declares that the URL is an LD
 Requests at package paths with `Accept: application/ld+json` will be framed and compacted with a default package frame:
 
 ```
-
+% curl -H 'Accept: application/ld+json' http://localhost:8086 | jq
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   459  100   459    0     0   112k      0 --:--:-- --:--:-- --:--:--  112k
+{
+  "@context": "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru",
+  "@type": "http://underlay.mit.edu/ns#Package",
+  "dcterms:created": "2019-12-05T10:00:22-05:00",
+  "dcterms:modified": "2019-12-05T10:00:22-05:00",
+  "ldp:hasMemberRelation": "prov:hadMember",
+  "ldp:membershipResource": "dweb:/ipns/QmXS2hw3KjFC19uSzYJwXn5Fp5GRjueEpBLyQheuSMLs1D",
+  "prov:value": {
+    "@id": "dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354",
+    "dcterms:extent": 4
+  }
+}
 ```
 
+The remote context reference here - `ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru` - is from [types/utils.go](types/utils.go) and it's added as a file `/context.jsonld` to the root package.
+
 ### HEAD
+
+```
+% curl -i -I http://localhost:8086/8-cell-orig.gif
+HTTP/1.1 200 OK
+Content-Length: 640580
+Content-Type: image/gif
+Etag: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4
+Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"
+Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"
+Date: Sat, 07 Dec 2019 07:22:01 GMT
+
+```
 
 ### POST
 
 ### PUT
 
+You need to give three headers for `PUT` requests: two `Link` headers and one `Content-Type`. The first `Link` has to be `<http://www.w3.org/ns/ldp#Resource>; rel="type"`, and the second is one of:
+
+- `<http://www.w3.org/ns/ldp#DirectContainer>; rel="type"`
+- `<http://www.w3.org/ns/ldp#RDFSource>; rel="type"`
+- `<http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"`
+
+for packages, messages, and files, respectively.
+
+`Content-Type` must be either `application/n-quads` or `application/ls+json` for packages and messages, and can be any value (although a value is still required) for files.
+
+You'll get the CID of the files back in the `ETag` response header.
+
+```
+% curl -i -X PUT -T 8-cell-orig.gif \
+-H 'Content-Type: image/gif' \
+-H 'Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"' \
+-H 'Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"' \
+http://localhost:8086/8-cell-orig.gif
+HTTP/1.1 100 Continue
+
+HTTP/1.1 201 Created
+Etag: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4
+Date: Sat, 07 Dec 2019 07:05:16 GMT
+Content-Length: 0
+
+```
+
 ### MKCOL
 
 ### DELETE
+
+You need to provide a resource's current `ETag` in an `If-Match` header in order to delete it. If you don't, your request will be rejected eith `416 Requested Range Not Satisfiable`.
+
+```
+% curl -i -X DELETE http://localhost:8086/8-cell-orig.gif
+HTTP/1.1 416 Requested Range Not Satisfiable
+Date: Sat, 07 Dec 2019 07:23:09 GMT
+Content-Length: 0
+
+```
+
+```
+% curl -i -X DELETE \
+-H 'If-Match: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4' \
+http://localhost:8086/8-cell-orig.gif
+HTTP/1.1 200 OK
+Date: Sat, 07 Dec 2019 07:25:01 GMT
+Content-Length: 0
+
+```
 
 ## Installation
 

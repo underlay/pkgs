@@ -8,7 +8,6 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 	files "github.com/ipfs/go-ipfs-files"
-	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 
@@ -16,8 +15,7 @@ import (
 )
 
 // Put handles HTTP PUT requests
-func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
-	fs, object, pin := api.Unixfs(), api.Object(), api.Pin()
+func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	contentType := req.Header.Get("Content-Type")
 	if contentType == "" || len(req.Header["Content-Type"]) != 1 {
 		// Content-Type is required for all requests.
@@ -74,7 +72,7 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 
 	ifMatch := req.Header.Get("If-Match")
 
-	return db.Update(func(txn *badger.Txn) error {
+	return server.db.Update(func(txn *badger.Txn) error {
 		var parentPath string
 		tail := strings.LastIndex(pathname, "/")
 		if tail > 0 {
@@ -125,10 +123,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 
 			if linkType == linkTypeNonRDFSource {
 				// New file!
-				leaf, err = fs.Add(
+				leaf, err = server.fs.Add(
 					ctx,
 					files.NewReaderFile(req.Body),
-					options.Unixfs.Pin(true),
+					options.Unixfs.Pin(false),
 					options.Unixfs.RawLeaves(true),
 					options.Unixfs.CidVersion(1),
 				)
@@ -138,7 +136,7 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 					return err
 				}
 
-				stat, err := object.Stat(ctx, leaf)
+				stat, err := server.object.Stat(ctx, leaf)
 				if err != nil {
 					res.WriteHeader(502)
 					return err
@@ -157,14 +155,14 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 				if contentType == "application/ld+json" {
 					doc = req.Body
 				} else if contentType == "application/n-quads" {
-					doc, err = types.Proc.FromRDF(req.Body, types.Opts)
+					doc, err = server.proc.FromRDF(req.Body, server.opts)
 					if err != nil {
 						res.WriteHeader(400)
 						return err
 					}
 				}
 
-				n, err := types.Proc.Normalize(doc, types.Opts)
+				n, err := server.proc.Normalize(doc, server.opts)
 				if err != nil {
 					res.WriteHeader(400)
 					return err
@@ -178,10 +176,10 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 
 				reader := strings.NewReader(m)
 
-				leaf, err = fs.Add(
+				leaf, err = server.fs.Add(
 					ctx,
 					files.NewReaderFile(reader),
-					options.Unixfs.Pin(true),
+					options.Unixfs.Pin(false),
 					options.Unixfs.RawLeaves(true),
 					options.Unixfs.CidVersion(1),
 				)
@@ -245,23 +243,14 @@ func Put(ctx context.Context, res http.ResponseWriter, req *http.Request, db *ba
 			return nil
 		}
 
-		err = percolate(ctx,
+		err = server.percolate(ctx,
 			parentPath,
 			parentID,
 			parentValue,
 			parent, name, leaf,
-			txn, api,
+			txn,
 		)
 
-		if err != nil {
-			res.WriteHeader(500)
-			return err
-		}
-
-		// The leaf was pinned directly when we added it,
-		// so we should unpin in here. It'll still be indirectly
-		// pin through the directory tree.
-		err = pin.Rm(ctx, leaf, options.Pin.RmRecursive(true))
 		if err != nil {
 			res.WriteHeader(500)
 			return err

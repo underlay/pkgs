@@ -8,14 +8,12 @@ import (
 	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
-	core "github.com/ipfs/interface-go-ipfs-core"
 
 	types "github.com/underlay/pkgs/types"
 )
 
 // Delete handles HTTP DELETE requests
-func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db *badger.DB, api core.CoreAPI) error {
-	object := api.Object()
+func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	pathname := req.URL.Path
 	if pathname == "/" {
 		res.WriteHeader(403)
@@ -31,7 +29,7 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 		return nil
 	}
 
-	return db.Update(func(txn *badger.Txn) error {
+	return server.db.Update(func(txn *badger.Txn) error {
 		r := &types.Resource{}
 		err := r.Get(pathname, txn)
 		if err == badger.ErrKeyNotFound {
@@ -86,7 +84,7 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 			return err
 		}
 
-		parentValue, err = object.RmLink(ctx, parentValue, name)
+		parentValue, err = server.object.RmLink(ctx, parentValue, name)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -97,7 +95,7 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 		// Also remove the direct object for packages
 		if p := r.GetPackage(); p != nil {
 			txn.Delete([]byte(fmt.Sprintf("%s.nt", pathname)))
-			parentValue, err = object.RmLink(ctx, parentValue, fmt.Sprintf("%s.nt", name))
+			parentValue, err = server.object.RmLink(ctx, parentValue, fmt.Sprintf("%s.nt", name))
 			if err != nil {
 				res.WriteHeader(500)
 				return err
@@ -124,14 +122,14 @@ func Delete(ctx context.Context, res http.ResponseWriter, req *http.Request, db 
 			}
 		}
 
-		err = percolate(
+		err = server.percolate(
 			ctx,
 			parentPath,
 			parentID,
 			parentValue,
 			parent,
 			name, nil,
-			txn, api,
+			txn,
 		)
 
 		if err != nil {

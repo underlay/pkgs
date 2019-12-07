@@ -1,22 +1,17 @@
 package types
 
 import (
-	"context"
-
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-ipfs-files"
-	core "github.com/ipfs/interface-go-ipfs-core"
-	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
-	ld "github.com/piprate/json-gold/ld"
 )
 
 // ContextURL shouldn't be hardcoded; will factor out in the future
 const ContextURL = "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru"
 
-const rawContext = `{
+// RawContext is the raw package compaction context
+var RawContext = []byte(`{
 	"@context": {
 		"dcterms": "http://purl.org/dc/terms/",
 		"prov": "http://www.w3.org/ns/prov#",
@@ -36,19 +31,7 @@ const rawContext = `{
 		}
 	}
 }
-`
-
-// PackageFrame is the JSON-LD Frame used for framing packages
-var PackageFrame = map[string]interface{}{
-	"@context": ContextURL,
-	"@type":    packageIri.Value,
-}
-
-// Proc is the multi-purpose JSON-LD processor we use for everything
-var Proc = ld.NewJsonLdProcessor()
-
-// Opts are the JSON-LD processing options we use for everything
-var Opts = ld.NewJsonLdOptions("")
+`)
 
 // ETag is a convenience function that multiplexes between Resource
 // types to return their CID as a string (ID for packages, not Value)
@@ -100,19 +83,4 @@ func GetCid(val []byte) (cid.Cid, string, error) {
 	}
 
 	return c, s, nil
-}
-
-// GetFile Do we use this?
-func GetFile(ctx context.Context, c cid.Cid, fs core.UnixfsAPI) (files.File, error) {
-	node, err := fs.Get(ctx, path.IpfsPath(c))
-	if err != nil {
-		return nil, err
-	}
-
-	file, is := node.(files.File)
-	if !is {
-		return nil, files.ErrNotReader
-	}
-
-	return file, nil
 }

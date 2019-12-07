@@ -5,15 +5,11 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
-	files "github.com/ipfs/go-ipfs-files"
-	core "github.com/ipfs/interface-go-ipfs-core"
-	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
@@ -26,6 +22,9 @@ const defaultSubject = "_:c14n0"
 // so we pin the v1 maually on initialization.
 const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
 
+// PackageIri is an rdf:type for Underlay Packages
+var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
+
 const dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
 
 // EmptyDirectoryCID is the CID instance of EmptyDirectory
@@ -33,7 +32,6 @@ var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
 
 var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
-var packageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
 var extentIri = ld.NewIRI("http://purl.org/dc/terms/extent")
 var formatIri = ld.NewIRI("http://purl.org/dc/terms/format")
@@ -50,13 +48,13 @@ var messageURI = regexp.MustCompile("^ul:/ipfs/([a-z2-7]{59})$")
 var packageURI = regexp.MustCompile("^ul:/ipfs/([a-z2-7]{59})#(_:c14n\\d+)$")
 
 var base = []*ld.Quad{
-	ld.NewQuad(subject, typeIri, packageIri, ""),
+	ld.NewQuad(subject, typeIri, PackageIri, ""),
 	ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
 }
 
-// NewPackage creates and new timestamped package.
-// It pints it to IPFS but does *not* write to the database.
-func NewPackage(ctx context.Context, pathname, resource string, fs core.UnixfsAPI) (cid.Cid, *Package, error) {
+// NewPackage creates a new timestamped package.
+// It does not pin it to IPFS or write it to the database.
+func NewPackage(ctx context.Context, pathname, resource string) *Package {
 	dateTime := time.Now().Format(time.RFC3339)
 
 	pkg := &Package{
@@ -69,8 +67,7 @@ func NewPackage(ctx context.Context, pathname, resource string, fs core.UnixfsAP
 		Member:   make([]string, 0),
 	}
 
-	c, err := pkg.Normalize(ctx, pathname, fs, nil)
-	return c, pkg, err
+	return pkg
 }
 
 // ErrNotPackage is returned when a resource unmarhsalls into a non-package unexpectedly
@@ -110,41 +107,6 @@ func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
 		return nil, nil, err
 	}
 	return path.IpfsPath(id), path.IpfsPath(value), nil
-}
-
-// Normalize re-computes the normalized n-quads representation of the package,
-// pins it to IPFS, and sets the pkg.Id with the result. It returns the string cid.
-// You probably want to be careful about unpinning the resulting CID sometime afterwards
-func (pkg *Package) Normalize(ctx context.Context, path string, fs core.UnixfsAPI, txn *badger.Txn) (c cid.Cid, err error) {
-	ds := ld.NewRDFDataset()
-	ds.Graphs["@default"], err = pkg.NQuads(path, txn)
-	if err != nil {
-		return
-	}
-
-	api := ld.NewJsonLdApi()
-	var res interface{}
-	res, err = api.Normalize(ds, Opts)
-	if err != nil {
-		return
-	}
-
-	reader := strings.NewReader(res.(string))
-	resolved, err := fs.Add(
-		ctx,
-		files.NewReaderFile(reader),
-		options.Unixfs.Pin(true),
-		options.Unixfs.RawLeaves(true),
-		options.Unixfs.CidVersion(1),
-	)
-
-	if err != nil {
-		return
-	}
-
-	c = resolved.Cid()
-	pkg.Id = c.Bytes()
-	return
 }
 
 // NQuads converts the Package to a slice of ld.*Quads
@@ -230,7 +192,7 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 			)
 			if s != name {
 				resource := fmt.Sprintf("%s/%s", pkg.Resource, name)
-				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
+				doc = append(doc, ld.NewQuad(member, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
 		}
 	}
