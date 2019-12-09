@@ -3,6 +3,7 @@ package types
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -39,6 +40,7 @@ var createdIri = ld.NewIRI("http://purl.org/dc/terms/created")
 var modifiedIri = ld.NewIRI("http://purl.org/dc/terms/modified")
 var typeIri = ld.NewIRI(ld.RDFType)
 var hadMemberIri = ld.NewIRI("http://www.w3.org/ns/prov#hadMember")
+var wasRevisionOfIri = ld.NewIRI("http://www.w3.org/ns/prov#wasRevisionOf")
 var membershipResourceIri = ld.NewIRI("http://www.w3.org/ns/ldp#membershipResource")
 var hasMemberRelationIri = ld.NewIRI("http://www.w3.org/ns/ldp#hasMemberRelation")
 
@@ -111,14 +113,10 @@ func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
 
 // NQuads converts the Package to a slice of ld.*Quads
 func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+5+len(pkg.Member)*2)
+	doc := make([]*ld.Quad, len(base), len(base)+6+len(pkg.Member)*2)
 	copy(doc, base)
 
-	c, err := cid.Cast(pkg.Value)
-	if err != nil {
-		return nil, err
-	}
-	s, err := c.StringOfBase(multibase.Base32)
+	_, s, err := GetCid(pkg.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +129,16 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 		ld.NewQuad(subject, createdIri, ld.NewLiteral(pkg.Created, dateTime, ""), ""),
 		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(pkg.Modified, dateTime, ""), ""),
 	)
+
+	if pkg.RevisionOf != nil && pkg.RevisionOfSubject != "" {
+		log.Println("was revision of")
+		_, r, err := GetCid(pkg.RevisionOf)
+		if err != nil {
+			return nil, err
+		}
+		object := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", r, pkg.RevisionOfSubject))
+		doc = append(doc, ld.NewQuad(subject, wasRevisionOfIri, object, ""))
+	}
 
 	for _, name := range pkg.Member {
 		var key string

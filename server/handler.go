@@ -246,6 +246,7 @@ func (server *Server) percolate(
 		parent.Value = value.Cid().Bytes()
 		parent.Modified = modified
 		parent.RevisionOf = parent.Id
+		parent.RevisionOfSubject = parent.Subject
 
 		// Now that parent.Value has changed, we need to re-normalize
 		id, err := server.Normalize(ctx, parentPath, parent, false, txn)

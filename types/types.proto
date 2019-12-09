@@ -9,9 +9,9 @@ message Package {
 	uint64 extent = 5;
 	string created = 6;
 	string modified = 7;
-	repeated string member = 8;
-	repeated string memberOf = 9;
-	bytes revisionOf = 10;
+	bytes revisionOf = 8;
+	string revisionOfSubject = 9;
+	repeated string member = 10;
 }
 
 message File {

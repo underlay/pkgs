@@ -1,0 +1,35 @@
+PREFIX u: <http://underlay.mit.edu/ns#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX ldp: <http://www.w3.org/ns/ldp#>
+PREFIX prov: <http://www.w3.org/ns/prov#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+
+start = @_:package
+
+_:package bnode CLOSED {
+  a [ u:Package ] ;
+  ldp:hasMemberRelation [ prov:hadMember ] ;
+  ldp:membershipResource iri ;
+  dcterms:created xsd:dateTime ;
+  dcterms:modified xsd:dateTime ;
+  prov:value iri /^dweb:\/ipfs\/[a-z0-9]{59}$/ ;
+  dcterms:extent xsd:integer ? ;
+  prov:wasRevisionOf iri /^ul:\/ipfs\/[a-z0-9]{59}#_:c14n\d+$/ ? ;
+  ( prov:hadMember @_:p ) * ;
+  ( prov:hadMember @_:m ) * ;
+  ( prov:hadMember @_:f ) * ;
+}
+
+_:p iri /^ul:\/ipfs\/[a-z0-9]{59}#_:c14n\d+$/ CLOSED {
+  ldp:membershipResource iri ;
+}
+
+_:m iri /^ul:\/ipfs\/[a-z0-9]{59}$/ CLOSED {
+  ldp:membershipResource iri ? ;
+}
+
+_:f iri /^dweb:\/ipfs\/[a-z0-9]{59}$/ CLOSED {
+  dcterms:extent xsd:integer ;
+  dcterms:format xsd:string ;
+  ldp:membershipResource iri ? ;
+}
