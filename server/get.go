@@ -75,10 +75,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 		_, _ = io.Copy(res, file)
 	} else if m != nil {
 		res.Header().Add("Link", linkTypeNonRDFSource)
-		if accept == "application/n-quads" {
-			res.Header().Add("Content-Type", accept)
-			_, _ = io.Copy(res, file)
-		} else if accept == "application/ld+json" {
+		if accept == "application/ld+json" {
 			doc, err := server.proc.FromRDF(file, server.opts)
 			if err != nil {
 				res.WriteHeader(500)
@@ -88,21 +85,14 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 			res.Header().Add("Content-Type", accept)
 			_ = json.NewEncoder(res).Encode(doc)
 		} else {
-			res.WriteHeader(406)
-			return nil
+			res.Header().Add("Content-Type", "application/n-quads")
+			_, _ = io.Copy(res, file)
 		}
 	} else if p != nil {
 		res.Header().Add("Link", linkTypeDirectContainer)
-		if accept != "application/n-quads" && accept != "application/ld+json" {
-			res.WriteHeader(406)
-			return nil
-		}
-
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
-		res.Header().Add("Content-Type", accept)
-		if accept == "application/n-quads" {
-			_, _ = io.Copy(res, file)
-		} else if accept == "application/ld+json" {
+		if accept == "application/ld+json" {
+			res.Header().Add("Content-Type", "application/ld+json")
 			doc, err := server.proc.FromRDF(file, server.opts)
 			if err != nil {
 				res.WriteHeader(500)
@@ -122,6 +112,9 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 			framed["@context"] = types.ContextURL
 			_ = json.NewEncoder(res).Encode(framed)
+		} else {
+			res.Header().Add("Content-Type", "application/n-quads")
+			_, _ = io.Copy(res, file)
 		}
 	}
 	return nil

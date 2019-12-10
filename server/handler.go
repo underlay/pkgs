@@ -314,10 +314,5 @@ func (server *Server) percolate(
 		if err != nil {
 			return
 		}
-
-		// parentValue, err = server.object.AddLink(ctx, parentValue, name+".nt", nextID)
-		// if err != nil {
-		// 	return
-		// }
 	}
 }

@@ -65,7 +65,7 @@ The remote context reference here - `ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzv
 ### HEAD
 
 ```
-% curl -i -I http://localhost:8086/8-cell-orig.gif
+% curl -I http://localhost:8086/8-cell-orig.gif
 HTTP/1.1 200 OK
 Content-Length: 640580
 Content-Type: image/gif
