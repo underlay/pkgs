@@ -23,25 +23,16 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		return nil
 	}
 
-	links := req.Header["Link"]
-	var linkType string
-	var isTypeResource bool
-	for _, link := range links {
-		isTypeResource = isTypeResource || link == linkTypeResource
-		if _, has := linkTypes[link]; has {
-			if linkType == "" {
-				linkType = link
-			} else {
-				// Too many link types found
-				res.WriteHeader(400)
-				return nil
-			}
-		}
-	}
+	linkType := req.Header.Get("Link")
 
 	if linkType == "" {
 		// No link type found
 		res.WriteHeader(400)
+		return nil
+	}
+
+	if _, has := linkTypes[linkType]; !has {
+		res.WriteHeader(422)
 		return nil
 	}
 
@@ -221,7 +212,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 			}
 
 			if etag != ifMatch {
-				res.WriteHeader(416)
+				res.WriteHeader(412)
 				return nil
 			}
 
@@ -243,11 +234,13 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 			return nil
 		}
 
-		err = server.percolate(ctx,
+		err = server.percolate(
+			ctx,
 			parentPath,
 			parentID,
 			parentValue,
-			parent, name, leaf,
+			parent,
+			name, nil, leaf,
 			txn,
 		)
 

@@ -23,7 +23,7 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 	ifMatch := req.Header.Get("If-Match")
 	// Should we require ifMatch? I bet we should.
 	if ifMatch == "" {
-		res.WriteHeader(416)
+		res.WriteHeader(412)
 		return nil
 	}
 
@@ -48,7 +48,7 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 	}
 
 	if s != ifMatch {
-		res.WriteHeader(416)
+		res.WriteHeader(412)
 		return nil
 	}
 

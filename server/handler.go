@@ -8,7 +8,6 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	cid "github.com/ipfs/go-cid"
 	files "github.com/ipfs/go-ipfs-files"
 	core "github.com/ipfs/interface-go-ipfs-core"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
@@ -151,7 +150,13 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 // Normalize re-computes the normalized n-quads representation of the package,
 // pins it to IPFS, and sets the pkg.Id with the result. It returns the string cid.
 // You probably want to be careful about unpinning the resulting CID sometime afterwards
-func (server *Server) Normalize(ctx context.Context, path string, pkg *types.Package, pin bool, txn *badger.Txn) (c cid.Cid, err error) {
+func (server *Server) Normalize(
+	ctx context.Context,
+	path string,
+	pkg *types.Package,
+	pin bool,
+	txn *badger.Txn,
+) (resolved path.Resolved, err error) {
 	ds := ld.NewRDFDataset()
 	ds.Graphs["@default"], err = pkg.NQuads(path, txn)
 	if err != nil {
@@ -165,7 +170,7 @@ func (server *Server) Normalize(ctx context.Context, path string, pkg *types.Pac
 	}
 
 	reader := strings.NewReader(res.(string))
-	resolved, err := server.fs.Add(
+	resolved, err = server.fs.Add(
 		ctx,
 		files.NewReaderFile(reader),
 		options.Unixfs.Pin(pin),
@@ -177,8 +182,7 @@ func (server *Server) Normalize(ctx context.Context, path string, pkg *types.Pac
 		return
 	}
 
-	c = resolved.Cid()
-	pkg.Id = c.Bytes()
+	pkg.Id = resolved.Cid().Bytes()
 	return
 }
 
@@ -222,24 +226,34 @@ func (server *Server) percolate(
 	parentValue path.Resolved,
 	parent *types.Package,
 	name string,
+	id path.Resolved,
 	value path.Resolved,
 	txn *badger.Txn,
 ) (err error) {
+	var stat *core.ObjectStat
+	var s string
 	modified := time.Now().Format(time.RFC3339)
 	for {
 		// First patch the parent's value directory object
 		if value != nil {
 			value, err = server.object.AddLink(ctx, parentValue, name, value)
 			if err != nil {
-				return err
+				return
 			}
 		} else {
 			value = parentValue
 		}
 
-		stat, err := server.object.Stat(ctx, value)
+		if id != nil {
+			value, err = server.object.AddLink(ctx, value, name+".nt", id)
+			if err != nil {
+				return
+			}
+		}
+
+		stat, err = server.object.Stat(ctx, value)
 		if err != nil {
-			return err
+			return
 		}
 
 		parent.Extent = uint64(stat.CumulativeSize)
@@ -249,57 +263,61 @@ func (server *Server) percolate(
 		parent.RevisionOfSubject = parent.Subject
 
 		// Now that parent.Value has changed, we need to re-normalize
-		id, err := server.Normalize(ctx, parentPath, parent, false, txn)
+		id, err = server.Normalize(ctx, parentPath, parent, false, txn)
 		if err != nil {
-			return err
+			return
 		}
 
 		r := &types.Resource{}
 		r.Resource = &types.Resource_Package{Package: parent}
 		err = r.Set(parentPath, txn)
 		if err != nil {
-			return err
+			return
 		}
 
-		nextID := path.IpfsPath(id)
+		// nextID := path.IpfsPath(n)
 
 		if parentPath == "/" {
-			s, err := parentValue.Cid().StringOfBase(multibase.Base32)
+			s, err = parentValue.Cid().StringOfBase(multibase.Base32)
 			if err != nil {
-				return err
+				return
 			}
 
 			unpin := s != types.EmptyDirectory
 			err = server.pin.Update(ctx, parentValue, value, options.Pin.Unpin(unpin))
 			if err != nil {
-				return err
+				return
 			}
 
-			err = server.pin.Update(ctx, parentID, nextID, options.Pin.Unpin(true))
+			err = server.pin.Update(ctx, parentID, id, options.Pin.Unpin(true))
 			if err != nil {
-				return err
+				return
 			}
 
-			return nil
+			return
 		}
 
 		tail := strings.LastIndex(parentPath, "/")
 		name = parentPath[tail+1:]
-		parentPath = parentPath[:tail]
+		if tail > 0 {
+			parentPath = parentPath[:tail]
+		} else {
+			parentPath = "/"
+		}
 
-		parent, err := types.GetPackage(parentPath, txn)
+		parent, err = types.GetPackage(parentPath, txn)
 		if err != nil {
-			return err
+			return
 		}
 
 		parentID, parentValue, err = parent.Paths()
 		if err != nil {
-			return err
+			return
 		}
 
-		parentValue, err = server.object.AddLink(ctx, parentValue, name+".nt", nextID)
-		if err != nil {
-			return err
-		}
+		// parentValue, err = server.object.AddLink(ctx, parentValue, name+".nt", nextID)
+		// if err != nil {
+		// 	return
+		// }
 	}
 }

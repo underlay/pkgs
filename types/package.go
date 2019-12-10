@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"fmt"
-	"log"
 	"regexp"
 	"strconv"
 	"time"
@@ -12,7 +11,6 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
 )
 
@@ -131,7 +129,6 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 	)
 
 	if pkg.RevisionOf != nil && pkg.RevisionOfSubject != "" {
-		log.Println("was revision of")
 		_, r, err := GetCid(pkg.RevisionOf)
 		if err != nil {
 			return nil, err
@@ -160,18 +157,17 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 		}
 		p, m, f := resource.GetPackage(), resource.GetMessage(), resource.GetFile()
 		if p != nil {
-			resource := ld.NewIRI(p.Resource)
-			uri := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", p.Id, p.Subject))
-			doc = append(doc,
-				ld.NewQuad(subject, hadMemberIri, uri, ""),
-				ld.NewQuad(uri, membershipResourceIri, resource, ""),
-			)
-		} else if m != nil {
-			c, err := cid.Cast(m)
+			_, s, err := GetCid(p.Id)
 			if err != nil {
 				return nil, err
 			}
-			s, err := c.StringOfBase(multibase.Base32)
+			uri := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, p.Subject))
+			doc = append(doc,
+				ld.NewQuad(subject, hadMemberIri, uri, ""),
+				ld.NewQuad(uri, membershipResourceIri, ld.NewIRI(p.Resource), ""),
+			)
+		} else if m != nil {
+			_, s, err := GetCid(m)
 			if err != nil {
 				return nil, err
 			}
@@ -182,11 +178,7 @@ func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error)
 				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
 		} else if f != nil {
-			c, err := cid.Cast(f.Value)
-			if err != nil {
-				return nil, err
-			}
-			s, err := c.StringOfBase(multibase.Base32)
+			_, s, err := GetCid(f.Value)
 			if err != nil {
 				return nil, err
 			}

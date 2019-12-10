@@ -80,23 +80,24 @@ Date: Sat, 07 Dec 2019 07:22:01 GMT
 
 ### PUT
 
-You need to give three headers for `PUT` requests: two `Link` headers and one `Content-Type`. The first `Link` has to be `<http://www.w3.org/ns/ldp#Resource>; rel="type"`, and the second is one of:
+`PUT` requires at least one `Link` header and one `Content-Type` header. The `Link` must be one of:
 
 - `<http://www.w3.org/ns/ldp#DirectContainer>; rel="type"`
 - `<http://www.w3.org/ns/ldp#RDFSource>; rel="type"`
 - `<http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"`
 
-for packages, messages, and files, respectively.
+for packages, messages, and files, respectively. For now, only messages and files can be `PUT` - new packages must be created with `MKCOL`.
 
-`Content-Type` must be either `application/n-quads` or `application/ls+json` for packages and messages, and can be any value (although a value is still required) for files.
+`Content-Type` must be either `application/n-quads` or `application/ld+json` for packages and messages, and can be any value (although a value is still required) for files.
 
-You'll get the CID of the files back in the `ETag` response header.
+In addition, if `PUT` is being used to modify an existing resource (it can also be used to create new resources), the request must have an `If-Match` header whose value is the resource's current `ETag`, just like `DELETE`. If the header is not provided, or if it does not match, the request will fail with `412 Precondition Failed`.
+
+You'll get the CID of the file or message back in the `ETag` response header.
 
 ```
 % curl -i -X PUT -T 8-cell-orig.gif \
--H 'Content-Type: image/gif' \
--H 'Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"' \
 -H 'Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"' \
+-H 'Content-Type: image/gif' \
 http://localhost:8086/8-cell-orig.gif
 HTTP/1.1 100 Continue
 
@@ -109,13 +110,41 @@ Content-Length: 0
 
 ### MKCOL
 
+Create (empty) packages with the `MKCOL` HTTP verb:
+
+```
+% curl -i -X MKCOL http://localhost:8086/bar
+HTTP/1.1 201 Created
+Etag: bafkreif42bur6q7n476a54f55nfnzngojyf3emnm77nzu4aui4swjyrzua
+Date: Tue, 10 Dec 2019 01:22:28 GMT
+Content-Length: 0
+
+% curl -H 'Accept: application/ld+json' http://localhost:8086/bar | jq
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+100   463  100   463    0     0  77166      0 --:--:-- --:--:-- --:--:-- 77166
+{
+  "@context": "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru",
+  "@type": "http://underlay.mit.edu/ns#Package",
+  "dcterms:created": "2019-12-09T20:22:27-05:00",
+  "dcterms:modified": "2019-12-09T20:22:27-05:00",
+  "ldp:hasMemberRelation": "prov:hadMember",
+  "ldp:membershipResource": "dweb:/ipns/QmRybuaATHF1mnVy3VhhcbRhUedc3DkrpgMQBVEXx7oT9r/bar",
+  "prov:value": {
+    "@id": "dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354",
+    "dcterms:extent": 4
+  }
+}
+
+```
+
 ### DELETE
 
-You need to provide a resource's current `ETag` in an `If-Match` header in order to delete it. If you don't, your request will be rejected eith `416 Requested Range Not Satisfiable`.
+You need to provide a resource's current `ETag` in an `If-Match` header in order to delete it. If you don't, your request will be rejected with `412 Precondition Failed`.
 
 ```
 % curl -i -X DELETE http://localhost:8086/8-cell-orig.gif
-HTTP/1.1 416 Requested Range Not Satisfiable
+HTTP/1.1 412 Precondition Failed
 Date: Sat, 07 Dec 2019 07:23:09 GMT
 Content-Length: 0
 

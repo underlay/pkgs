@@ -2,13 +2,13 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
-	options "github.com/ipfs/interface-go-ipfs-core/options"
+	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
+	multibase "github.com/multiformats/go-multibase"
 
 	types "github.com/underlay/pkgs/types"
 )
@@ -21,12 +21,6 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 		return nil
 	} else if !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
-		return nil
-	}
-
-	accept := req.Header.Get("Content-Type")
-	if accept != "application/ld+json" && accept != "application/n-quads" {
-		res.WriteHeader(415)
 		return nil
 	}
 
@@ -58,15 +52,15 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 		}
 
 		for _, member := range parent.Member {
-			if member == name {
+			if member == name || member == name+".nt" {
 				res.WriteHeader(409)
 				return nil
 			}
 		}
 
 		parent.Member = append(parent.Member, name)
-		p := types.NewPackage(ctx, pathname, fmt.Sprintf(""))
-		c, err := server.Normalize(ctx, pathname, p, false, nil)
+		p := types.NewPackage(ctx, pathname, server.resource+pathname)
+		id, err := server.Normalize(ctx, pathname, p, false, nil)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -86,7 +80,11 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			return err
 		}
 
-		leaf := path.IpfsPath(c)
+		value, err := cid.Cast(p.Value)
+		if err != nil {
+			res.WriteHeader(500)
+			return err
+		}
 
 		err = server.percolate(
 			ctx,
@@ -95,7 +93,8 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			parentValue,
 			parent,
 			name,
-			leaf,
+			id,
+			path.IpfsPath(value),
 			txn,
 		)
 
@@ -104,12 +103,14 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			return err
 		}
 
-		err = server.pin.Rm(ctx, leaf, options.Pin.RmRecursive(true))
+		s, err := id.Cid().StringOfBase(multibase.Base32)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
 		}
+		res.Header().Add("ETag", s)
 
+		res.WriteHeader(201)
 		return nil
 	})
 }

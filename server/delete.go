@@ -25,7 +25,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 
 	ifMatch := req.Header.Get("If-Match")
 	if ifMatch == "" {
-		res.WriteHeader(416)
+		res.WriteHeader(412)
 		return nil
 	}
 
@@ -48,7 +48,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		}
 
 		if s != ifMatch {
-			res.WriteHeader(416)
+			res.WriteHeader(412)
 			return nil
 		}
 
@@ -128,7 +128,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 			parentID,
 			parentValue,
 			parent,
-			name, nil,
+			name, nil, nil,
 			txn,
 		)
 
