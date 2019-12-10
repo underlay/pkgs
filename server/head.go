@@ -62,6 +62,7 @@ func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *ht
 		res.Header().Add("Link", linkTypeRDFSource)
 		res.Header().Add("Content-Type", "application/n-quads")
 	} else if p != nil {
+		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
 		res.Header().Add("Content-Type", "application/n-quads")
 	}
