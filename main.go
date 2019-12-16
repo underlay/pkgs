@@ -27,7 +27,6 @@ func main() {
 	}
 
 	api, err := ipfs.NewURLApiWithClient(ipfsHost, http.DefaultClient)
-
 	if err != nil {
 		log.Fatal(err)
 	}

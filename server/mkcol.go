@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -109,6 +110,8 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			return err
 		}
 		res.Header().Add("ETag", s)
+		res.Header().Add("Link", linkTypeDirectContainer)
+		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
 
 		res.WriteHeader(201)
 		return nil

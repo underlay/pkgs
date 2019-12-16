@@ -21,6 +21,14 @@ const defaultSubject = "_:c14n0"
 // so we pin the v1 maually on initialization.
 const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
 
+type ResourceType uint32
+
+const (
+	PackageType ResourceType = iota
+	MessageType
+	FileType
+)
+
 // PackageIri is an rdf:type for Underlay Packages
 var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 
