@@ -21,10 +21,10 @@ func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *ht
 
 	ifNoneMatch := req.Header.Get("If-None-Match")
 
-	resource := &types.Resource{}
-
-	err := server.db.View(func(txn *badger.Txn) error {
-		return resource.Get(pathname, txn)
+	var resource types.Resource
+	err := server.db.View(func(txn *badger.Txn) (err error) {
+		resource, _, err = types.GetResource(pathname, txn)
+		return
 	})
 
 	if err == badger.ErrKeyNotFound {
@@ -38,33 +38,32 @@ func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *ht
 	// Now that we know there's a resource here, we add the first Link header
 	res.Header().Add("Link", linkTypeResource)
 
-	etag := resource.ETag()
-	_, s, err := types.GetCid(etag)
+	_, etag := resource.ETag()
 	if err != nil {
 		res.WriteHeader(500)
 		return err
 	}
 
-	if ifNoneMatch == s {
+	if ifNoneMatch == etag {
 		res.WriteHeader(304)
 		return nil
 	}
 
-	res.Header().Add("ETag", s)
+	res.Header().Add("ETag", etag)
 
-	p, m, f := resource.GetPackage(), resource.GetMessage(), resource.GetFile()
-	if f != nil {
-		res.Header().Add("Link", linkTypeNonRDFSource)
-		extent := strconv.FormatUint(f.Extent, 10)
-		res.Header().Add("Content-Type", f.Format)
-		res.Header().Add("Content-Length", extent)
-	} else if m != nil {
+	switch t := resource.(type) {
+	case *types.Package:
+		res.Header().Add("Link", linkTypeDirectContainer)
+		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, t.Subject))
+		res.Header().Add("Content-Type", "application/n-quads")
+	case types.Message:
 		res.Header().Add("Link", linkTypeRDFSource)
 		res.Header().Add("Content-Type", "application/n-quads")
-	} else if p != nil {
-		res.Header().Add("Link", linkTypeDirectContainer)
-		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
-		res.Header().Add("Content-Type", "application/n-quads")
+	case *types.File:
+		res.Header().Add("Link", linkTypeNonRDFSource)
+		extent := strconv.FormatUint(t.Extent, 10)
+		res.Header().Add("Content-Type", t.Format)
+		res.Header().Add("Content-Length", extent)
 	}
 
 	res.Write(nil)

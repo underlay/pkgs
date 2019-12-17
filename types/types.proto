@@ -16,15 +16,6 @@ message Package {
 
 message File {
 	bytes value = 1;
-	string format = 2;
-	uint64 extent = 3;
-}
-
-message Resource {
-	uint32 type = 1;
-	oneof resource {
-		Package package = 2;
-		bytes message = 3;
-		File file = 4;
-	}
+	uint64 extent = 2;
+	string format = 3;
 }

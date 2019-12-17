@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	cid "github.com/ipfs/go-cid"
-	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
 
 	types "github.com/underlay/pkgs/types"
@@ -35,21 +34,14 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 	}
 
 	return server.db.Update(func(txn *badger.Txn) error {
-		parentResource := &types.Resource{}
-		err := parentResource.Get(parentPath, txn)
-		if err == badger.ErrKeyNotFound {
+		parent, err := types.GetPackage(parentPath, txn)
+		if err == badger.ErrKeyNotFound || err == types.ErrNotPackage {
 			// MKCOL actually requires 409 and not 404 here...
 			res.WriteHeader(409)
 			return nil
 		} else if err != nil {
 			res.WriteHeader(500)
 			return err
-		}
-
-		parent := parentResource.GetPackage()
-		if parent == nil {
-			res.WriteHeader(409)
-			return nil
 		}
 
 		for _, member := range parent.Member {
@@ -59,17 +51,16 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			}
 		}
 
+		t := time.Now()
 		parent.Member = append(parent.Member, name)
-		p := types.NewPackage(ctx, pathname, server.resource+pathname)
+		p := types.NewPackage(ctx, t, pathname, server.resource+pathname)
 		id, err := server.Normalize(ctx, pathname, p, false, nil)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
 		}
 
-		resource := &types.Resource{}
-		resource.Resource = &types.Resource_Package{Package: p}
-		err = resource.Set(pathname, txn)
+		err = types.SetResource(p, pathname, txn)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -81,7 +72,7 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			return err
 		}
 
-		value, err := cid.Cast(p.Value)
+		value, err := server.object.AddLink(ctx, parentValue, name, id)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
@@ -89,13 +80,11 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 
 		err = server.percolate(
 			ctx,
+			t,
 			parentPath,
-			parentID,
-			parentValue,
 			parent,
-			name,
-			id,
-			path.IpfsPath(value),
+			parentID, parentValue,
+			value,
 			txn,
 		)
 
@@ -109,6 +98,7 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			res.WriteHeader(500)
 			return err
 		}
+
 		res.Header().Add("ETag", s)
 		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))

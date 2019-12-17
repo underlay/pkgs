@@ -13,12 +13,18 @@ Some environment variables:
 - `PKGS_PATH` (default `/tmp/pkgs`) is the directory that pkgs will open a [Badger](https://github.com/dgraph-io/badger) database in for caching the directory tree.
 - `PKGS_ROOT` (default `dweb:/ipns/Qm...`, where `Qm...` is the PeerID of the IPFS node) root for local URIs - root package `/` will be identified with it, and all other resources will be identified as paths relative it. Don't include a trailing slash.
 
+Reading about WebDAV and LDP are good background for what pkgs is and how to use it.
+
+Essentially, pkgs manages a filesystem that you interact with over HTTP, using an extended set of HTTP verbs like `MKCOL` ("make collection" a la Unix `mkdir`). Directories in this filesystem are called _Packages_, and every package is identified by a URI - you configure pkgs with a "root" URI like `http://example.com`, which lets us address the rest of the directory tree with URIs like `http://example.com/foo`, `http://example.com/bar/baz`, etc.
+
+This root URI isn't used for anything other than identifiers in RDF, so it doesn't need to resolve to anything.
+
 ### GET
 
-`GET` requests to a resource _require_ an explicit `Accept` header of either `application/ld+json` or `application/n-quads`.
+`GET` requests to a resource will return `Content-Type: application/n-quads` by default.
 
 ```
-% curl -i -H 'Accept: application/n-quads' http://localhost:8086
+% curl -i http://localhost:8086
 HTTP/1.1 200 OK
 Content-Type: application/n-quads
 Etag: bafkreifjc7gebvrm3jbsdjobgpshcfo5twx2suyercykybcrvtwpy5angu
@@ -60,7 +66,7 @@ Requests at package paths with `Accept: application/ld+json` will be framed and 
 }
 ```
 
-The remote context reference here - `ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru` - is from [types/utils.go](types/utils.go) and it's added as a file `/context.jsonld` to the root package.
+The remote context `ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru` is from [types/utils.go](types/utils.go) and it's added as a file `/context.jsonld` to the root package when you start pkgs for the first time.
 
 ### HEAD
 
@@ -110,7 +116,7 @@ Content-Length: 0
 
 ### MKCOL
 
-Create (empty) packages with the `MKCOL` HTTP verb:
+Create (empty) packages with `MKCOL`:
 
 ```
 % curl -i -X MKCOL http://localhost:8086/bar
@@ -148,9 +154,6 @@ HTTP/1.1 412 Precondition Failed
 Date: Sat, 07 Dec 2019 07:23:09 GMT
 Content-Length: 0
 
-```
-
-```
 % curl -i -X DELETE \
 -H 'If-Match: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4' \
 http://localhost:8086/8-cell-orig.gif

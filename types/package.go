@@ -8,10 +8,47 @@ import (
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
-	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	ld "github.com/piprate/json-gold/ld"
+)
+
+// Resource is interface type for resources (packages, messages, and files)
+type Resource interface {
+	ETag() (cid.Cid, string)
+}
+
+// A Message is just the bytes of a CID
+type Message []byte
+
+// ETag satisfies the Resource interface
+func (m Message) ETag() (cid.Cid, string) {
+	c, s, _ := GetCid(m)
+	return c, s
+}
+
+// ETag satisfies the Resource interface for Packages
+func (p *Package) ETag() (cid.Cid, string) {
+	c, s, _ := GetCid(p.Id)
+	return c, s
+}
+
+// ETag satisfies the Resource interface for Files
+func (f *File) ETag() (cid.Cid, string) {
+	c, s, _ := GetCid(f.Value)
+	return c, s
+}
+
+// ResourceType is an enum for resource types
+type ResourceType uint8
+
+const (
+	// PackageType the ResourceType for Packages
+	PackageType ResourceType = iota
+	// MessageType the ResourceType for Messages
+	MessageType
+	// FileType is the ResourceType for Files
+	FileType
 )
 
 const defaultSubject = "_:c14n0"
@@ -20,14 +57,6 @@ const defaultSubject = "_:c14n0"
 // By default, IPFS nodes only pin the CIDv0 empty directory,
 // so we pin the v1 maually on initialization.
 const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
-
-type ResourceType uint32
-
-const (
-	PackageType ResourceType = iota
-	MessageType
-	FileType
-)
 
 // PackageIri is an rdf:type for Underlay Packages
 var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
@@ -62,8 +91,8 @@ var base = []*ld.Quad{
 
 // NewPackage creates a new timestamped package.
 // It does not pin it to IPFS or write it to the database.
-func NewPackage(ctx context.Context, pathname, resource string) *Package {
-	dateTime := time.Now().Format(time.RFC3339)
+func NewPackage(ctx context.Context, t time.Time, pathname, resource string) *Package {
+	dateTime := t.Format(time.RFC3339)
 
 	pkg := &Package{
 		Resource: resource,
@@ -82,35 +111,15 @@ func NewPackage(ctx context.Context, pathname, resource string) *Package {
 var ErrNotPackage = fmt.Errorf("Unexpected non-package resource")
 
 // GetPackage is a convenience method for retriving a package instance from the database
-func GetPackage(pathname string, txn *badger.Txn) (*Package, error) {
-	r := &Resource{}
-	err := r.Get(pathname, txn)
-	if err != nil {
-		return nil, err
-	}
-	p := r.GetPackage()
-	if p == nil {
-		return nil, ErrNotPackage
-	}
-	return p, nil
-}
-
-// Set writes the package back to the database.
-// It does *not* normalize it; you have to do that yourself.
-func (pkg *Package) Set(pathname string, txn *badger.Txn) error {
-	r := &Resource{}
-	r.Resource = &Resource_Package{Package: pkg}
-	return r.Set(pathname, txn)
-}
 
 // Paths is a convenience method for getting the path.Resolved version
 // of a packages ID and Value CIDs at the same time.
-func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
-	id, err := cid.Cast(pkg.Id)
+func (p *Package) Paths() (path.Resolved, path.Resolved, error) {
+	id, err := cid.Cast(p.Id)
 	if err != nil {
 		return nil, nil, err
 	}
-	value, err := cid.Cast(pkg.Value)
+	value, err := cid.Cast(p.Value)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -118,88 +127,83 @@ func (pkg *Package) Paths() (path.Resolved, path.Resolved, error) {
 }
 
 // NQuads converts the Package to a slice of ld.*Quads
-func (pkg *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+6+len(pkg.Member)*2)
+func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
+	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member)*2)
 	copy(doc, base)
 
-	_, s, err := GetCid(pkg.Value)
+	_, s, err := GetCid(p.Value)
 	if err != nil {
 		return nil, err
 	}
 	value := ld.NewIRI(fmt.Sprintf("dweb:/ipfs/%s", s))
-	extent := strconv.FormatUint(pkg.Extent, 10)
+	extent := strconv.FormatUint(p.Extent, 10)
 	doc = append(doc,
-		ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(pkg.Resource), ""),
+		ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(p.Resource), ""),
 		ld.NewQuad(subject, valueIri, value, ""),
 		ld.NewQuad(value, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-		ld.NewQuad(subject, createdIri, ld.NewLiteral(pkg.Created, dateTime, ""), ""),
-		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(pkg.Modified, dateTime, ""), ""),
+		ld.NewQuad(subject, createdIri, ld.NewLiteral(p.Created, dateTime, ""), ""),
+		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(p.Modified, dateTime, ""), ""),
 	)
 
-	if pkg.RevisionOf != nil && pkg.RevisionOfSubject != "" {
-		_, r, err := GetCid(pkg.RevisionOf)
+	if p.RevisionOf != nil && p.RevisionOfSubject != "" {
+		_, r, err := GetCid(p.RevisionOf)
 		if err != nil {
 			return nil, err
 		}
-		object := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", r, pkg.RevisionOfSubject))
+		object := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", r, p.RevisionOfSubject))
 		doc = append(doc, ld.NewQuad(subject, wasRevisionOfIri, object, ""))
 	}
 
-	for _, name := range pkg.Member {
+	for _, name := range p.Member {
 		var key string
 		if pathname == "/" {
 			key = "/" + name
 		} else {
 			key = fmt.Sprintf("%s/%s", pathname, name)
 		}
-		item, err := txn.Get([]byte(key))
+
+		resource, _, err := GetResource(key, txn)
 		if err != nil {
 			return nil, err
 		}
-		resource := &Resource{}
-		err = item.Value(func(val []byte) error {
-			return proto.Unmarshal(val, resource)
-		})
-		if err != nil {
-			return nil, err
-		}
-		p, m, f := resource.GetPackage(), resource.GetMessage(), resource.GetFile()
-		if p != nil {
-			_, s, err := GetCid(p.Id)
+
+		switch t := resource.(type) {
+		case *Package:
+			_, s, err := GetCid(t.Id)
 			if err != nil {
 				return nil, err
 			}
-			uri := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, p.Subject))
+			uri := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, t.Subject))
 			doc = append(doc,
 				ld.NewQuad(subject, hadMemberIri, uri, ""),
-				ld.NewQuad(uri, membershipResourceIri, ld.NewIRI(p.Resource), ""),
+				ld.NewQuad(uri, membershipResourceIri, ld.NewIRI(t.Resource), ""),
 			)
-		} else if m != nil {
-			_, s, err := GetCid(m)
+		case Message:
+			_, s, err := GetCid(t)
 			if err != nil {
 				return nil, err
 			}
 			member := ld.NewIRI("ul:/ipfs/" + s)
 			doc = append(doc, ld.NewQuad(subject, hadMemberIri, member, ""))
 			if s != name {
-				resource := fmt.Sprintf("%s/%s", pkg.Resource, name)
+				resource := fmt.Sprintf("%s/%s", p.Resource, name)
 				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
-		} else if f != nil {
-			_, s, err := GetCid(f.Value)
+		case *File:
+			_, s, err := GetCid(t.Value)
 			if err != nil {
 				return nil, err
 			}
 
 			member := ld.NewIRI("dweb:/ipfs/" + s)
-			extent := strconv.FormatUint(f.Extent, 10)
+			extent := strconv.FormatUint(t.Extent, 10)
 			doc = append(doc,
 				ld.NewQuad(subject, hadMemberIri, member, ""),
 				ld.NewQuad(member, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-				ld.NewQuad(member, formatIri, ld.NewLiteral(f.Format, ld.XSDString, ""), ""),
+				ld.NewQuad(member, formatIri, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
 			)
 			if s != name {
-				resource := fmt.Sprintf("%s/%s", pkg.Resource, name)
+				resource := fmt.Sprintf("%s/%s", p.Resource, name)
 				doc = append(doc, ld.NewQuad(member, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
 		}

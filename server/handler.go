@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
@@ -44,6 +45,7 @@ type Server struct {
 	api      *ld.JsonLdApi
 	proc     *ld.JsonLdProcessor
 	opts     *ld.JsonLdOptions
+	locks    map[string]*sync.Mutex
 }
 
 // Initialize opens the Badger database and writes an empty root package if none exists
@@ -60,6 +62,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		pin:      api.Pin(),
 		db:       db,
 		resource: resource,
+		locks:    map[string]*sync.Mutex{},
 		proc:     ld.NewJsonLdProcessor(),
 		opts: &ld.JsonLdOptions{
 			OmitGraph:      true,
@@ -79,14 +82,18 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		return nil, err
 	}
 
-	r := &types.Resource{}
+	var u types.ResourceType
 	err = db.View(func(txn *badger.Txn) error {
-		return r.Get(index, txn)
+		item, err := txn.Get([]byte(index))
+		if err == nil {
+			u = types.ResourceType(item.UserMeta())
+		}
+		return err
 	})
 
 	if err == badger.ErrKeyNotFound {
 		name := "context.jsonld"
-		pkg := types.NewPackage(ctx, index, resource)
+		pkg := types.NewPackage(ctx, time.Now(), index, resource)
 		pkg.Member = append(pkg.Member, name)
 
 		value, err := fs.Add(ctx,
@@ -104,23 +111,28 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 			return nil, err
 		}
 
-		stat, err := object.Stat(ctx, path.Join(value, name))
+		pkg.Value = value.Cid().Bytes()
+
+		rootStat, err := object.Stat(ctx, value)
 		if err != nil {
 			return nil, err
 		}
 
-		pkg.Value = value.Cid().Bytes()
+		pkg.Extent = uint64(rootStat.CumulativeSize)
 
-		file := &types.File{
-			Value:  stat.Cid.Bytes(),
-			Format: "application/ld+json",
-			Extent: uint64(stat.CumulativeSize),
+		fileStat, err := object.Stat(ctx, path.Join(value, name))
+		if err != nil {
+			return nil, err
 		}
 
-		fileResource := &types.Resource{}
-		fileResource.Resource = &types.Resource_File{File: file}
+		file := &types.File{
+			Value:  fileStat.Cid.Bytes(),
+			Format: "application/ld+json",
+			Extent: uint64(fileStat.CumulativeSize),
+		}
+
 		err = db.Update(func(txn *badger.Txn) (err error) {
-			err = fileResource.Set("/"+name, txn)
+			err = types.SetResource(file, "/"+name, txn)
 			if err != nil {
 				return
 			}
@@ -132,7 +144,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 				return
 			}
 
-			return pkg.Set(index, txn)
+			return types.SetResource(pkg, index, txn)
 		})
 
 		if err != nil {
@@ -140,7 +152,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		}
 	} else if err != nil {
 		return nil, err
-	} else if r.GetPackage() == nil {
+	} else if u != types.PackageType {
 		return nil, types.ErrNotPackage
 	}
 
@@ -192,23 +204,28 @@ func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
 	ctx := context.TODO()
 	if req.Method == "GET" {
 		err = server.Get(ctx, res, req)
-	} else if req.Method == "PUT" {
-		err = server.Put(ctx, res, req)
-	} else if req.Method == "POST" {
-		err = server.Post(ctx, res, req)
 	} else if req.Method == "HEAD" {
 		err = server.Head(ctx, res, req)
+		// } else if req.Method == "POST" {
+		// 	err = server.Post(ctx, res, req)
+	} else if req.Method == "PUT" {
+		err = server.Put(ctx, res, req)
 	} else if req.Method == "DELETE" {
 		err = server.Delete(ctx, res, req)
-	} else if req.Method == "OPTIONS" {
+		// } else if req.Method == "TRACE" {
+		// } else if req.Method == "OPTIONS" {
+		// } else if req.Method == "CONNECT" {
+		// } else if req.Method == "PATCH" {
 	} else if req.Method == "COPY" {
 	} else if req.Method == "LOCK" {
 	} else if req.Method == "MKCOL" {
 		err = server.Mkcol(ctx, res, req)
 	} else if req.Method == "MOVE" {
-	} else if req.Method == "PROPFIND" {
-	} else if req.Method == "PROPPATCH" {
+		// } else if req.Method == "PROPFIND" {
+		// } else if req.Method == "PROPPATCH" {
 	} else if req.Method == "UNLOCK" {
+	} else {
+		res.WriteHeader(405)
 	}
 
 	if err != nil {
@@ -221,96 +238,88 @@ func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
 
 func (server *Server) percolate(
 	ctx context.Context,
-	parentPath string,
-	parentID path.Resolved,
-	parentValue path.Resolved,
-	parent *types.Package,
-	name string,
-	id path.Resolved,
+	modified time.Time,
+	pathname string,
+	p *types.Package,
+	oldID, oldValue path.Resolved,
 	value path.Resolved,
 	txn *badger.Txn,
 ) (err error) {
 	var stat *core.ObjectStat
 	var s string
-	modified := time.Now().Format(time.RFC3339)
+	var id path.Resolved
+
+	m := modified.Format(time.RFC3339)
+
 	for {
-		// First patch the parent's value directory object
-		if value != nil {
-			value, err = server.object.AddLink(ctx, parentValue, name, value)
-			if err != nil {
-				return
-			}
-		} else {
-			value = parentValue
-		}
-
-		if id != nil {
-			value, err = server.object.AddLink(ctx, value, name+".nt", id)
-			if err != nil {
-				return
-			}
-		}
-
 		stat, err = server.object.Stat(ctx, value)
 		if err != nil {
 			return
 		}
 
-		parent.Extent = uint64(stat.CumulativeSize)
-		parent.Value = value.Cid().Bytes()
-		parent.Modified = modified
-		parent.RevisionOf = parent.Id
-		parent.RevisionOfSubject = parent.Subject
+		p.Extent = uint64(stat.CumulativeSize)
+		p.Value = value.Cid().Bytes()
+		p.Modified = m
+		p.RevisionOf = p.Id
+		p.RevisionOfSubject = p.Subject
 
 		// Now that parent.Value has changed, we need to re-normalize
-		id, err = server.Normalize(ctx, parentPath, parent, false, txn)
+		id, err = server.Normalize(ctx, pathname, p, false, txn)
 		if err != nil {
 			return
 		}
 
-		r := &types.Resource{}
-		r.Resource = &types.Resource_Package{Package: parent}
-		err = r.Set(parentPath, txn)
+		err = types.SetResource(p, pathname, txn)
 		if err != nil {
 			return
 		}
 
-		// nextID := path.IpfsPath(n)
-
-		if parentPath == "/" {
-			s, err = parentValue.Cid().StringOfBase(multibase.Base32)
+		if pathname == "/" {
+			s, err = oldValue.Cid().StringOfBase(multibase.Base32)
 			if err != nil {
 				return
 			}
 
-			unpin := s != types.EmptyDirectory
-			err = server.pin.Update(ctx, parentValue, value, options.Pin.Unpin(unpin))
+			unpin := options.Pin.Unpin(s != types.EmptyDirectory)
+			err = server.pin.Update(ctx, oldValue, value, unpin)
 			if err != nil {
 				return
 			}
 
-			err = server.pin.Update(ctx, parentID, id, options.Pin.Unpin(true))
+			err = server.pin.Update(ctx, oldID, id)
 			if err != nil {
 				return
 			}
 
+			// ...
 			return
 		}
 
-		tail := strings.LastIndex(parentPath, "/")
-		name = parentPath[tail+1:]
+		tail := strings.LastIndex(pathname, "/")
+		name := pathname[tail+1:]
 		if tail > 0 {
-			parentPath = parentPath[:tail]
+			pathname = pathname[:tail]
 		} else {
-			parentPath = "/"
+			pathname = "/"
 		}
 
-		parent, err = types.GetPackage(parentPath, txn)
+		p, err = types.GetPackage(pathname, txn)
 		if err != nil {
 			return
 		}
 
-		parentID, parentValue, err = parent.Paths()
+		oldID, oldValue, err = p.Paths()
+		if err != nil {
+			return
+		}
+
+		// First patch the parent's value directory object
+		value, err = server.object.AddLink(ctx, oldValue, name, value)
+		if err != nil {
+			return
+		}
+
+		value, err = server.object.AddLink(ctx, value, name+".nt", id)
 		if err != nil {
 			return
 		}

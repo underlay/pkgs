@@ -2,9 +2,10 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
 	files "github.com/ipfs/go-ipfs-files"
@@ -63,34 +64,42 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 
 	ifMatch := req.Header.Get("If-Match")
 
+	var parentPath string
+	tail := strings.LastIndex(pathname, "/")
+	if tail > 0 {
+		parentPath = pathname[:tail]
+	} else {
+		parentPath = "/"
+		tail = 0
+	}
+
+	name := pathname[tail+1:]
+
+	// Acquire lock
+	var lock *sync.Mutex
+	var has bool
+	if lock, has = server.locks[pathname]; !has {
+		lock = &sync.Mutex{}
+		server.locks[pathname] = lock
+	}
+	lock.Lock()
+	defer lock.Unlock()
+	defer delete(server.locks, pathname)
+
+	// time.Sleep(time.Second * 10)
+
 	return server.db.Update(func(txn *badger.Txn) error {
-		var parentPath string
-		tail := strings.LastIndex(pathname, "/")
-		if tail > 0 {
-			parentPath = pathname[:tail]
-		} else {
-			parentPath = "/"
-			tail = 0
-		}
-
-		name := pathname[tail+1:]
-
-		parentResource := &types.Resource{}
-		err := parentResource.Get(parentPath, txn)
+		parent, err := types.GetPackage(parentPath, txn)
 		if err == badger.ErrKeyNotFound {
 			// Parent doesn't exist!
 			res.WriteHeader(404)
 			return nil
+		} else if err == types.ErrNotPackage {
+			res.WriteHeader(409)
+			return nil
 		} else if err != nil {
 			res.WriteHeader(500)
 			return err
-		}
-
-		parent := parentResource.GetPackage()
-		if parent == nil {
-			// Parent is not a package!
-			res.WriteHeader(409)
-			return nil
 		}
 
 		parentID, parentValue, err := parent.Paths()
@@ -99,113 +108,27 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		}
 
 		var leaf path.Resolved
-		var created bool
+		var mutation bool
 		var etag string
-		resource := &types.Resource{}
-		err = resource.Get(pathname, txn)
-		if err == badger.ErrKeyNotFound {
-			// Okay so parent is an existing package and this is a new
-			// route beneath it, with link type linkType.
-			created = true
+		var value types.Resource
 
-			// It's safe to start mutating p because it we encouter
-			// errors we'll return before we write it back to the database
-			parent.Member = append(parent.Member, name)
-
-			if linkType == linkTypeNonRDFSource {
-				// New file!
-				leaf, err = server.fs.Add(
-					ctx,
-					files.NewReaderFile(req.Body),
-					options.Unixfs.Pin(false),
-					options.Unixfs.RawLeaves(true),
-					options.Unixfs.CidVersion(1),
-				)
-
-				if err != nil {
-					res.WriteHeader(502)
-					return err
-				}
-
-				stat, err := server.object.Stat(ctx, leaf)
-				if err != nil {
-					res.WriteHeader(502)
-					return err
-				}
-
-				file := &types.File{
-					Value:  leaf.Cid().Bytes(),
-					Format: contentType,
-					Extent: uint64(stat.CumulativeSize),
-				}
-
-				resource.Resource = &types.Resource_File{File: file}
-			} else if linkType == linkTypeRDFSource {
-				// New message!
-				var doc interface{}
-				if contentType == "application/ld+json" {
-					doc = req.Body
-				} else if contentType == "application/n-quads" {
-					doc, err = server.proc.FromRDF(req.Body, server.opts)
-					if err != nil {
-						res.WriteHeader(400)
-						return err
-					}
-				}
-
-				n, err := server.proc.Normalize(doc, server.opts)
-				if err != nil {
-					res.WriteHeader(400)
-					return err
-				}
-
-				m, is := n.(string)
-				if !is {
-					res.WriteHeader(400)
-					return nil
-				}
-
-				reader := strings.NewReader(m)
-
-				leaf, err = server.fs.Add(
-					ctx,
-					files.NewReaderFile(reader),
-					options.Unixfs.Pin(false),
-					options.Unixfs.RawLeaves(true),
-					options.Unixfs.CidVersion(1),
-				)
-
-				if err != nil {
-					res.WriteHeader(502)
-					return err
-				}
-
-				resource.Resource = &types.Resource_Message{Message: leaf.Cid().Bytes()}
-			} else if linkType == linkTypeDirectContainer {
-				// New subpackage!
-				// ... we'll implement this later :-/
-				res.WriteHeader(501)
-				return nil
+		for _, member := range parent.Member {
+			if member == name {
+				mutation = true
+				break
 			}
+		}
 
-			_, etag, err = types.GetCid(resource.ETag())
-			if err != nil {
-				res.WriteHeader(500)
-				return err
-			}
-
-			err = resource.Set(pathname, txn)
-			if err != nil {
-				res.WriteHeader(500)
-				return err
-			}
-		} else if err != nil {
-			res.WriteHeader(500)
-			return err
-		} else {
+		if mutation {
 			// The resource already exists!
+			resource, _, err := types.GetResource(pathname, txn)
+			if err != nil {
+				res.WriteHeader(500)
+				return err
+			}
+
 			// For now we can at least check the If-Match tag
-			_, etag, err = types.GetCid(resource.ETag())
+			_, etag := resource.ETag()
 			if err != nil {
 				res.WriteHeader(500)
 				return err
@@ -216,31 +139,116 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 				return nil
 			}
 
-			if p := resource.GetPackage(); p != nil {
-				txn.Delete([]byte(fmt.Sprintf("%s.nt", pathname)))
-
-				prefix := []byte(fmt.Sprintf("%s/", pathname))
-				iter := txn.NewIterator(badger.IteratorOptions{
-					PrefetchValues: false,
-					Prefix:         prefix,
-				})
-
-				for iter.Seek(prefix); iter.Valid(); iter.Next() {
-					txn.Delete(iter.Item().Key())
-				}
-			}
-
 			res.WriteHeader(501)
 			return nil
 		}
 
+		// Okay so parent is an existing package and this is a new
+		// route beneath it, with link type linkType.
+
+		// It's safe to start mutating p because it we encouter
+		// errors we'll return before we write it back to the database
+		parent.Member = append(parent.Member, name)
+
+		if linkType == linkTypeNonRDFSource {
+			// New file!
+			leaf, err = server.fs.Add(
+				ctx,
+				files.NewReaderFile(req.Body),
+				options.Unixfs.Pin(false),
+				options.Unixfs.RawLeaves(true),
+				options.Unixfs.CidVersion(1),
+			)
+
+			if err != nil {
+				res.WriteHeader(502)
+				return err
+			}
+
+			stat, err := server.object.Stat(ctx, leaf)
+			if err != nil {
+				res.WriteHeader(502)
+				return err
+			}
+
+			file := &types.File{
+				Value:  leaf.Cid().Bytes(),
+				Format: contentType,
+				Extent: uint64(stat.CumulativeSize),
+			}
+
+			value = file
+		} else if linkType == linkTypeRDFSource {
+			// New message!
+			var doc interface{}
+			if contentType == "application/ld+json" {
+				doc = req.Body
+			} else if contentType == "application/n-quads" {
+				doc, err = server.proc.FromRDF(req.Body, server.opts)
+				if err != nil {
+					res.WriteHeader(400)
+					return err
+				}
+			}
+
+			n, err := server.proc.Normalize(doc, server.opts)
+			if err != nil {
+				res.WriteHeader(400)
+				return err
+			}
+
+			m, is := n.(string)
+			if !is {
+				res.WriteHeader(400)
+				return nil
+			}
+
+			reader := strings.NewReader(m)
+
+			leaf, err = server.fs.Add(
+				ctx,
+				files.NewReaderFile(reader),
+				options.Unixfs.Pin(false),
+				options.Unixfs.RawLeaves(true),
+				options.Unixfs.CidVersion(1),
+			)
+
+			if err != nil {
+				res.WriteHeader(502)
+				return err
+			}
+
+			value = types.Message(leaf.Cid().Bytes())
+		} else if linkType == linkTypeDirectContainer {
+			// New subpackage!
+			// ... we'll implement this later :-/
+			res.WriteHeader(501)
+			return nil
+		}
+
+		// newResource := types.NewResource(value)
+
+		_, etag = value.ETag()
+		if err != nil {
+			res.WriteHeader(500)
+			return err
+		}
+
+		err = types.SetResource(value, pathname, txn)
+		if err != nil {
+			res.WriteHeader(500)
+			return err
+		}
+
+		nextValue, err := server.object.AddLink(ctx, parentValue, name, leaf)
+
 		err = server.percolate(
 			ctx,
+			time.Now(),
 			parentPath,
-			parentID,
-			parentValue,
 			parent,
-			name, nil, leaf,
+			parentID, parentValue,
+			nextValue,
 			txn,
 		)
 
@@ -250,10 +258,10 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		}
 
 		res.Header().Add("ETag", etag)
-		if created {
-			res.WriteHeader(201)
-		} else {
+		if mutation {
 			res.WriteHeader(200)
+		} else {
+			res.WriteHeader(201)
 		}
 
 		res.Write(nil)

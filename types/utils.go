@@ -1,6 +1,8 @@
 package types
 
 import (
+	"log"
+
 	badger "github.com/dgraph-io/badger/v2"
 	proto "github.com/gogo/protobuf/proto"
 	cid "github.com/ipfs/go-cid"
@@ -9,6 +11,8 @@ import (
 
 // ContextURL shouldn't be hardcoded; will factor out in the future
 const ContextURL = "ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi6mdtru"
+
+const messageLength = 36
 
 // RawContext is the raw package compaction context
 var RawContext = []byte(`{
@@ -33,40 +37,78 @@ var RawContext = []byte(`{
 }
 `)
 
-// ETag is a convenience function that multiplexes between Resource
-// types to return their CID as a string (ID for packages, not Value)
-func (r *Resource) ETag() (etag []byte) {
-	p, m, f := r.GetPackage(), r.GetMessage(), r.GetFile()
-	if p != nil {
-		etag = p.Id
-	} else if m != nil {
-		etag = m
-	} else if f != nil {
-		etag = f.Value
+// GetPackage retrieves a resource, assuming that it is a package
+func GetPackage(pathname string, txn *badger.Txn) (p *Package, err error) {
+	item, err := txn.Get([]byte(pathname))
+	if err != nil {
+		return nil, err
+	}
+	if item.UserMeta() == uint8(PackageType) {
+		p = &Package{}
+		err = item.Value(func(val []byte) error {
+			return proto.Unmarshal(val, p)
+		})
+	} else {
+		err = ErrNotPackage
 	}
 	return
 }
 
-// Get unmarshalls a resource from the database
-func (r *Resource) Get(pathname string, txn *badger.Txn) error {
-	item, err := txn.Get([]byte(pathname))
+// GetResource retrives the appropriate resource from the given path
+func GetResource(pathname string, txn *badger.Txn) (r Resource, t ResourceType, err error) {
+	var item *badger.Item
+	item, err = txn.Get([]byte(pathname))
 	if err != nil {
-		return err
+		return
 	}
 
-	return item.Value(func(val []byte) error {
-		return proto.Unmarshal(val, r)
-	})
+	t = ResourceType(item.UserMeta())
+	switch t {
+	case 0:
+		item.Value(func(val []byte) error {
+			p := &Package{}
+			r = p
+			return proto.Unmarshal(val, p)
+		})
+	case 1:
+		var val []byte
+		val, err = item.ValueCopy(make([]byte, messageLength))
+		r = Message(val)
+	case 2:
+		item.Value(func(val []byte) error {
+			f := &File{}
+			r = f
+			return proto.Unmarshal(val, f)
+		})
+	}
+	return
 }
 
-// Set marshalls a resource and writes it to the database
-func (r *Resource) Set(pathname string, txn *badger.Txn) error {
-	val, err := proto.Marshal(r)
-	if err != nil {
-		return err
+// SetResource marshalls a resource and writes it to the database
+func SetResource(value interface{}, pathname string, txn *badger.Txn) (err error) {
+	var u ResourceType
+	var val []byte
+	switch t := value.(type) {
+	case *Package:
+		u = PackageType
+		val, err = proto.Marshal(t)
+	case Message:
+		u = MessageType
+		val = t
+	case *File:
+		u = FileType
+		val, err = proto.Marshal(t)
+	default:
+		log.Fatalln("Invalid resource")
 	}
 
-	return txn.Set([]byte(pathname), val)
+	if err != nil {
+		return
+	}
+
+	key := []byte(pathname)
+	e := badger.NewEntry(key, val).WithMeta(byte(u))
+	return txn.SetEntry(e)
 }
 
 // GetCid is a convenience method for turning byte slices

@@ -2,10 +2,11 @@ package server
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"net/http"
 	"strings"
+	"sync"
+	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
 
@@ -23,6 +24,17 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		return nil
 	}
 
+	// Acquire lock
+	var lock *sync.Mutex
+	var has bool
+	if lock, has = server.locks[pathname]; !has {
+		lock = &sync.Mutex{}
+		server.locks[pathname] = lock
+	}
+	lock.Lock()
+	defer lock.Unlock()
+	defer delete(server.locks, pathname)
+
 	ifMatch := req.Header.Get("If-Match")
 	if ifMatch == "" {
 		res.WriteHeader(412)
@@ -30,8 +42,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	}
 
 	return server.db.Update(func(txn *badger.Txn) error {
-		r := &types.Resource{}
-		err := r.Get(pathname, txn)
+		r, u, err := types.GetResource(pathname, txn)
 		if err == badger.ErrKeyNotFound {
 			res.WriteHeader(404)
 			return nil
@@ -40,14 +51,8 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 			return err
 		}
 
-		etag := r.ETag()
-		_, s, err := types.GetCid(etag)
-		if err != nil {
-			res.WriteHeader(500)
-			return err
-		}
-
-		if s != ifMatch {
+		_, etag := r.ETag()
+		if etag != ifMatch {
 			res.WriteHeader(412)
 			return nil
 		}
@@ -78,24 +83,32 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		}
 
 		// Now update the value by removing the object link
-		parentID, parentValue, err := parent.Paths()
+		// c, err := cid.Cast(parent.Value)
+		// if err != nil {
+		// 	res.WriteHeader(500)
+		// 	return err
+		// }
+
+		// value := path.IpfsPath(c)
+
+		oldID, oldValue, err := parent.Paths()
 		if err != nil {
 			res.WriteHeader(500)
 			return err
 		}
 
-		parentValue, err = server.object.RmLink(ctx, parentValue, name)
+		value, err := server.object.RmLink(ctx, oldValue, name)
 		if err != nil {
 			res.WriteHeader(500)
 			return err
 		}
 
-		txn.Delete([]byte(pathname))
+		_ = txn.Delete([]byte(pathname))
 
 		// Also remove the direct object for packages
-		if p := r.GetPackage(); p != nil {
-			txn.Delete([]byte(fmt.Sprintf("%s.nt", pathname)))
-			parentValue, err = server.object.RmLink(ctx, parentValue, fmt.Sprintf("%s.nt", name))
+		if u == types.PackageType {
+			_ = txn.Delete([]byte(pathname + ".nt"))
+			value, err = server.object.RmLink(ctx, value, name+".nt")
 			if err != nil {
 				res.WriteHeader(500)
 				return err
@@ -124,11 +137,11 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 
 		err = server.percolate(
 			ctx,
+			time.Now(),
 			parentPath,
-			parentID,
-			parentValue,
 			parent,
-			name, nil, nil,
+			oldID, oldValue,
+			value, // parentValue already has the appropriate link removed
 			txn,
 		)
 

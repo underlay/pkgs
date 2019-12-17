@@ -27,9 +27,10 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		return nil
 	}
 
-	resource := &types.Resource{}
-	err := server.db.View(func(txn *badger.Txn) error {
-		return resource.Get(pathname, txn)
+	var resource types.Resource
+	err := server.db.View(func(txn *badger.Txn) (err error) {
+		resource, _, err = types.GetResource(pathname, txn)
+		return
 	})
 
 	if err == badger.ErrKeyNotFound {
@@ -40,14 +41,13 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		return err
 	}
 
-	etag := resource.ETag()
-	_, s, err := types.GetCid(etag)
+	_, etag := resource.ETag()
 	if err != nil {
 		res.WriteHeader(500)
 		return err
 	}
 
-	if s != ifMatch {
+	if etag != ifMatch {
 		res.WriteHeader(412)
 		return nil
 	}
