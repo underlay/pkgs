@@ -111,9 +111,9 @@ func SetResource(value interface{}, pathname string, txn *badger.Txn) (err error
 	return txn.SetEntry(e)
 }
 
-// GetCid is a convenience method for turning byte slices
+// getCid is a convenience method for turning byte slices
 // into CID strings and instances at the same time.
-func GetCid(val []byte) (cid.Cid, string, error) {
+func getCid(val []byte) (cid.Cid, string, error) {
 	c, err := cid.Cast(val)
 	if err != nil {
 		return cid.Undef, "", err

@@ -23,19 +23,19 @@ type Message []byte
 
 // ETag satisfies the Resource interface
 func (m Message) ETag() (cid.Cid, string) {
-	c, s, _ := GetCid(m)
+	c, s, _ := getCid(m)
 	return c, s
 }
 
 // ETag satisfies the Resource interface for Packages
 func (p *Package) ETag() (cid.Cid, string) {
-	c, s, _ := GetCid(p.Id)
+	c, s, _ := getCid(p.Id)
 	return c, s
 }
 
 // ETag satisfies the Resource interface for Files
 func (f *File) ETag() (cid.Cid, string) {
-	c, s, _ := GetCid(f.Value)
+	c, s, _ := getCid(f.Value)
 	return c, s
 }
 
@@ -131,7 +131,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member)*2)
 	copy(doc, base)
 
-	_, s, err := GetCid(p.Value)
+	_, s, err := getCid(p.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +146,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	)
 
 	if p.RevisionOf != nil && p.RevisionOfSubject != "" {
-		_, r, err := GetCid(p.RevisionOf)
+		_, r, err := getCid(p.RevisionOf)
 		if err != nil {
 			return nil, err
 		}
@@ -169,7 +169,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 
 		switch t := resource.(type) {
 		case *Package:
-			_, s, err := GetCid(t.Id)
+			_, s, err := getCid(t.Id)
 			if err != nil {
 				return nil, err
 			}
@@ -179,7 +179,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 				ld.NewQuad(uri, membershipResourceIri, ld.NewIRI(t.Resource), ""),
 			)
 		case Message:
-			_, s, err := GetCid(t)
+			_, s, err := getCid(t)
 			if err != nil {
 				return nil, err
 			}
@@ -190,7 +190,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
 			}
 		case *File:
-			_, s, err := GetCid(t.Value)
+			_, s, err := getCid(t.Value)
 			if err != nil {
 				return nil, err
 			}
