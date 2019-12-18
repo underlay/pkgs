@@ -69,7 +69,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 			CompactArrays:  true,
 			UseNativeTypes: true,
 			Format:         "application/n-quads",
-			Algorithm:      "URGNA2012",
+			Algorithm:      "URDNA2015",
 			DocumentLoader: loader.NewDwebDocumentLoader(api),
 		},
 	}
