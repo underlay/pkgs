@@ -16,6 +16,7 @@ import (
 // Resource is interface type for resources (packages, messages, and files)
 type Resource interface {
 	ETag() (cid.Cid, string)
+	URI() string
 }
 
 // A Message is just the bytes of a CID
@@ -27,16 +28,34 @@ func (m Message) ETag() (cid.Cid, string) {
 	return c, s
 }
 
+// URI satisfies the Resource interface
+func (m Message) URI() string {
+	_, s, _ := getCid(m)
+	return fmt.Sprintf("ul:/ipfs/%s", s)
+}
+
 // ETag satisfies the Resource interface for Packages
 func (p *Package) ETag() (cid.Cid, string) {
 	c, s, _ := getCid(p.Id)
 	return c, s
 }
 
+// URI satisfies the Resource interface
+func (p *Package) URI() string {
+	_, s, _ := getCid(p.Id)
+	return fmt.Sprintf("ul:/ipfs/%s#%s", s, p.Subject)
+}
+
 // ETag satisfies the Resource interface for Files
 func (f *File) ETag() (cid.Cid, string) {
 	c, s, _ := getCid(f.Value)
 	return c, s
+}
+
+// URI satisfies the Resource interface
+func (f *File) URI() string {
+	_, s, _ := getCid(f.Value)
+	return fmt.Sprintf("dweb:/ipfs/%s", s)
 }
 
 // ResourceType is an enum for resource types

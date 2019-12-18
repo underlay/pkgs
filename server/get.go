@@ -13,6 +13,7 @@ import (
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 
 	types "github.com/underlay/pkgs/types"
+	ui "github.com/underlay/pkgs/ui"
 )
 
 // Get handles HTTP GET requests
@@ -27,11 +28,24 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 		return nil
 	}
 
+	html := accept != "application/n-quads" && accept != "application/ld+json"
+
 	var resource types.Resource
 	err := server.db.View(func(txn *badger.Txn) (err error) {
 		resource, _, err = types.GetResource(pathname, txn)
+		if p, is := resource.(*types.Package); is && html {
+			reader, err := ui.RenderPackage(pathname, p, txn)
+			if err != nil {
+				return err
+			}
+			_, _ = io.Copy(res, reader)
+		}
 		return
 	})
+
+	if html {
+		return err
+	}
 
 	if err == badger.ErrKeyNotFound {
 		res.WriteHeader(404)
