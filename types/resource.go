@@ -145,6 +145,26 @@ func (p *Package) Paths() (path.Resolved, path.Resolved, error) {
 	return path.IpfsPath(id), path.IpfsPath(value), nil
 }
 
+// ValueURI returns the dweb URI for the package value
+func (p *Package) ValueURI() string {
+	_, s, _ := getCid(p.Value)
+	return "dweb:/ipfs/" + s
+}
+
+var printLayout = "Mon, 02 Jan 2006 15:04:05 -0700"
+
+// PrintModified formats p.Modified as printLayout
+func (p *Package) PrintModified() string {
+	t, _ := time.Parse(time.RFC3339, p.Modified)
+	return t.Format(printLayout)
+}
+
+// PrintCreated formats p.Created as printLayout
+func (p *Package) PrintCreated() string {
+	t, _ := time.Parse(time.RFC3339, p.Created)
+	return t.Format(printLayout)
+}
+
 // NQuads converts the Package to a slice of ld.*Quads
 func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member)*2)
