@@ -11,14 +11,22 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	files "github.com/ipfs/go-ipfs-files"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
+	content "github.com/joeltg/negotiate/content"
 
 	types "github.com/underlay/pkgs/types"
 	ui "github.com/underlay/pkgs/ui"
 )
 
+// var defaultContentType = "application/n-quads"
+
+var offers = map[types.ResourceType][]string{
+	types.PackageType: []string{"application/n-quads", "application/ld+json", "text/html"},
+	types.MessageType: []string{"application/n-quads", "application/ld+json"},
+	types.FileType:    []string{},
+}
+
 // Get handles HTTP GET requests
 func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
-	accept := req.Header.Get("Accept")
 	ifNoneMatch := req.Header.Get("If-None-Match")
 
 	pathname := req.URL.Path
@@ -28,24 +36,25 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 		return nil
 	}
 
-	html := accept != "application/n-quads" && accept != "application/ld+json"
-
+	var contentType string
 	var resource types.Resource
+	var u types.ResourceType
+	var page *ui.Page
 	err := server.db.View(func(txn *badger.Txn) (err error) {
-		resource, _, err = types.GetResource(pathname, txn)
-		if p, is := resource.(*types.Package); is && html {
-			reader, err := ui.RenderPackage(pathname, p, txn)
-			if err != nil {
-				return err
-			}
-			_, _ = io.Copy(res, reader)
+		resource, u, err = types.GetResource(pathname, txn)
+		defaultOffer := "application/n-quads"
+		if f, is := resource.(*types.File); is && u == types.FileType {
+			defaultOffer = f.Format
+		}
+
+		// It's a little awkward to render the HTML for the web ui here,
+		// but it's the best way to do it
+		contentType = content.NegotiateContentType(req, offers[u], defaultOffer)
+		if p, is := resource.(*types.Package); is && contentType == "text/html" {
+			page, err = ui.MakePage(pathname, p, txn)
 		}
 		return
 	})
-
-	if html {
-		return err
-	}
 
 	if err == badger.ErrKeyNotFound {
 		res.WriteHeader(404)
@@ -53,6 +62,15 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	} else if err != nil {
 		res.WriteHeader(500)
 		return err
+	}
+
+	// It's important to check for more than contentType == "text/html" because
+	// some files will have f.Format == "text/html"!
+	if u == types.PackageType && contentType == "text/html" {
+		res.WriteHeader(200)
+		res.Header().Add("Content-Type", contentType)
+		_ = ui.PageTemplate.Execute(res, page)
+		return nil
 	}
 
 	res.Header().Add("Link", linkTypeResource)
@@ -78,8 +96,8 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	case *types.Package:
 		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, t.Subject))
-		if accept == "application/ld+json" {
-			res.Header().Add("Content-Type", "application/ld+json")
+		if contentType == "application/ld+json" {
+			res.Header().Add("Content-Type", contentType)
 			doc, err := server.proc.FromRDF(file, server.opts)
 			if err != nil {
 				res.WriteHeader(500)
@@ -99,23 +117,23 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 			framed["@context"] = types.ContextURL
 			_ = json.NewEncoder(res).Encode(framed)
-		} else {
-			res.Header().Add("Content-Type", "application/n-quads")
+		} else if contentType == "application/n-quads" {
+			res.Header().Add("Content-Type", contentType)
 			_, _ = io.Copy(res, file)
 		}
 	case types.Message:
 		res.Header().Add("Link", linkTypeNonRDFSource)
-		if accept == "application/ld+json" {
+		if contentType == "application/ld+json" {
 			doc, err := server.proc.FromRDF(file, server.opts)
 			if err != nil {
 				res.WriteHeader(500)
 				return err
 			}
 
-			res.Header().Add("Content-Type", accept)
+			res.Header().Add("Content-Type", contentType)
 			_ = json.NewEncoder(res).Encode(doc)
-		} else {
-			res.Header().Add("Content-Type", "application/n-quads")
+		} else if contentType == "application/n-quads" {
+			res.Header().Add("Content-Type", contentType)
 			_, _ = io.Copy(res, file)
 		}
 	case *types.File:

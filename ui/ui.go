@@ -1,17 +1,15 @@
 package ui
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
-	"io"
 
 	badger "github.com/dgraph-io/badger/v2"
 
 	types "github.com/underlay/pkgs/types"
 )
 
-type page struct {
+type Page struct {
 	Pathname string
 	P        *types.Package
 	Packages map[string]*types.Package
@@ -55,11 +53,10 @@ var pageTemplate = `<!DOCTYPE html>
 	</body>
 </html>`
 
-var parsedTemplate = template.Must(template.New("page").Parse(pageTemplate))
+var PageTemplate = template.Must(template.New("page").Parse(pageTemplate))
 
-// RenderPackage is the only export from the UI package
-func RenderPackage(pathname string, p *types.Package, txn *badger.Txn) (io.Reader, error) {
-	packagePage := &page{
+func MakePage(pathname string, p *types.Package, txn *badger.Txn) (*Page, error) {
+	packagePage := &Page{
 		Pathname: pathname,
 		P:        p,
 		Packages: make(map[string]*types.Package),
@@ -88,7 +85,5 @@ func RenderPackage(pathname string, p *types.Package, txn *badger.Txn) (io.Reade
 			packagePage.Files[member] = t
 		}
 	}
-
-	buf := bytes.NewBuffer(nil)
-	return buf, parsedTemplate.Execute(buf, packagePage)
+	return packagePage, nil
 }
