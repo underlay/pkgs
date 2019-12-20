@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
 	files "github.com/ipfs/go-ipfs-files"
@@ -34,6 +35,14 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	if pathname != "/" && !pathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
+	}
+
+	var name string
+	if pathname == "/" {
+		name = "index"
+	} else {
+		index := strings.LastIndex(pathname, "/")
+		name = fmt.Sprintf(pathname[index+1:])
 	}
 
 	var contentType string
@@ -94,6 +103,8 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	// Okay now we have a Resource and we get to respond with its representation
 	switch t := resource.(type) {
 	case *types.Package:
+		contentDisposition := fmt.Sprintf("attachment; filename=%s.nt", name)
+		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, t.Subject))
 		if contentType == "application/ld+json" {
@@ -122,6 +133,8 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 			_, _ = io.Copy(res, file)
 		}
 	case types.Message:
+		contentDisposition := fmt.Sprintf("attachment; filename=%s.nt", name)
+		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeNonRDFSource)
 		if contentType == "application/ld+json" {
 			doc, err := server.proc.FromRDF(file, server.opts)
@@ -137,8 +150,9 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 			_, _ = io.Copy(res, file)
 		}
 	case *types.File:
+		contentDisposition := fmt.Sprintf("attachment; filename=%s", name)
+		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeNonRDFSource)
-
 		extent := strconv.FormatUint(t.Extent, 10)
 		res.Header().Add("Content-Type", t.Format)
 		res.Header().Add("Content-Length", extent)

@@ -3,12 +3,14 @@ package ui
 import (
 	"fmt"
 	"html/template"
+	"strings"
 
 	badger "github.com/dgraph-io/badger/v2"
 
 	types "github.com/underlay/pkgs/types"
 )
 
+// Page is the local struct we use for representing the data that gets rendered on an HTML page
 type Page struct {
 	Pathname string
 	P        *types.Package
@@ -17,38 +19,92 @@ type Page struct {
 	Files    map[string]*types.File
 }
 
+// Path splits the pathname into a slice of path elements
+func (p *Page) Path() []string {
+	if p.Pathname == "/" {
+		return nil
+	}
+	return strings.Split(p.Pathname[1:], "/")
+}
+
 var pageTemplate = `<!DOCTYPE html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<title>pkgs {{.Pathname}}</title>
+		<title>● {{ .Pathname }}</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 	</head>
+	<style>
+		html {
+			background: #fffff8;
+			color: #111;
+		}
+		body {
+			max-width: max-content;
+			margin: auto;
+		}
+		table {
+			border-spacing: 0 2px;
+		}
+		table tr td:nth-child(2) {
+			padding-left: 1em;
+		}
+		pre {
+			margin: 0;
+		}
+	</style>
 	<body>
-		<h1>{{.P.Resource}}</h1>
+		<header>
+			<h1>
+				<a href="/">●</a>
+				{{ range $index, $element := .Path }} / <a href={{ $element }}>{{ $element }}</a>{{ end }}
+			</h1>
+		</header>
+		<table>
+			<tr><td>Resource</td><td><pre>{{ .P.Resource }}</pre></td></tr>
+			<tr><td>Version</td><td><pre>{{ .P.URI }}</pre></td></tr>
+			<tr><td>Value</td><td><pre>{{ .P.ValueURI }}</pre></td></tr>
+			<tr><td>Created</td><td>{{ .P.PrintCreated }}</td></tr>
+			<tr><td>Modified</td><td>{{ .P.PrintModified }}</td></tr>
+		</table>
+		<hr />
 		<section>
 			<h2>Packages</h2>
-			<ul>
+			<dl>
 				{{ range $key, $value := .Packages }}
-				<li><strong><a href="{{ $key }}">{{ $key }}</a></strong> - {{ $value.URI }}</li>
+				<dt><a href="{{ $key }}">{{ $key }}</a></dt>
+				<dd><pre>{{ $value.URI }}</pre></dd>
+				{{ else }}
+				No packages
 				{{ end }}
-			</ul>
+			</dl>
 		</section>
 		<section>
 			<h2>Messages</h2>
-			<ul>
+			<dl>
+				{{ $p := .Pathname }}
 				{{ range $key, $value := .Messages }}
-				<li><strong>{{ $key }}</strong> - {{ $value.URI }}</li>
+				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
+				<dd><pre>{{ $value.URI }}</pre></dd>
+				{{ else }}
+				No messages
 				{{ end }}
-			</ul>
+			</dl>
 		</section>
 		<section>
 			<h2>Files</h2>
-			<ul>
+			<dl>
 				{{ range $key, $value := .Files }}
-				<li><strong>{{ $key }}</strong> - {{ $value.URI }}</li>
+				<dt><a href="{{ $key }}">{{ $key }}</a></dt>
+				<dd>
+					<pre>{{ $value.URI }}</pre>
+					<pre>{{ $value.Format }}</pre>
+					<pre>{{ $value.Extent }} B</pre>
+				</dd>
+				{{ else }}
+				No files
 				{{ end }}
-			</ul>
+			</dl>
 		</section>
 	</body>
 </html>`
