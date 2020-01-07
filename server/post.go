@@ -20,12 +20,14 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		return nil
 	}
 
+	// Should we require If-Match? I bet we should.
 	ifMatch := req.Header.Get("If-Match")
-	// Should we require ifMatch? I bet we should.
-	if ifMatch == "" {
+	if !etagRegex.MatchString(ifMatch) {
 		res.WriteHeader(412)
 		return nil
 	}
+
+	match := etagRegex.FindStringSubmatch(ifMatch)[1]
 
 	var resource types.Resource
 	err := server.db.View(func(txn *badger.Txn) (err error) {
@@ -47,10 +49,22 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		return err
 	}
 
-	if etag != ifMatch {
+	if etag != match {
 		res.WriteHeader(412)
 		return nil
 	}
+
+	switch resource.(type) {
+	case *types.Package:
+	default:
+		res.WriteHeader(405)
+		return nil
+	}
+
+	res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
+	res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE")
+	res.Header().Add("Access-Control-Allow-Headers", "Accept, Link, If-Match")
+	res.WriteHeader(501)
 
 	return nil
 }

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -63,6 +64,15 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 	}
 
 	ifMatch := req.Header.Get("If-Match")
+	var match string
+	if ifMatch != "" {
+		if etagRegex.MatchString(ifMatch) {
+			match = etagRegex.FindStringSubmatch(ifMatch)[1]
+		} else {
+			res.WriteHeader(412)
+			return nil
+		}
+	}
 
 	var parentPath string
 	tail := strings.LastIndex(pathname, "/")
@@ -134,7 +144,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 				return err
 			}
 
-			if etag != ifMatch {
+			if etag != match {
 				res.WriteHeader(412)
 				return nil
 			}
@@ -257,7 +267,11 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 			return err
 		}
 
-		res.Header().Add("ETag", etag)
+		res.Header().Add("ETag", fmt.Sprintf("\"%s\"", etag))
+		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
+		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
+		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Accept, Link, If-Match")
+		res.Header().Add("Access-Control-Expose-Headers", "ETag")
 		if mutation {
 			res.WriteHeader(200)
 		} else {

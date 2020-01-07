@@ -36,10 +36,12 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	defer delete(server.locks, pathname)
 
 	ifMatch := req.Header.Get("If-Match")
-	if ifMatch == "" {
+	if !etagRegex.MatchString(ifMatch) {
 		res.WriteHeader(412)
 		return nil
 	}
+
+	match := etagRegex.FindStringSubmatch(ifMatch)[1]
 
 	return server.db.Update(func(txn *badger.Txn) error {
 		r, u, err := types.GetResource(pathname, txn)
@@ -52,7 +54,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		}
 
 		_, etag := r.ETag()
-		if etag != ifMatch {
+		if etag != match {
 			res.WriteHeader(412)
 			return nil
 		}
@@ -150,7 +152,10 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 			return err
 		}
 
-		res.Write(nil)
+		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
+		res.Header().Add("Access-Control-Allow-Methods", "MKCOL, PUT")
+		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Link, If-Match")
+		res.WriteHeader(204)
 		return nil
 	})
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	badger "github.com/dgraph-io/badger/v2"
@@ -88,6 +89,9 @@ var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
 var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
 var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
+var titleIri = ld.NewIRI("http://purl.org/dc/terms/title")
+var descriptionIri = ld.NewIRI("http://purl.org/dc/terms/description")
+var subjectIri = ld.NewIRI("http://purl.org/dc/terms/subject")
 var extentIri = ld.NewIRI("http://purl.org/dc/terms/extent")
 var formatIri = ld.NewIRI("http://purl.org/dc/terms/format")
 var createdIri = ld.NewIRI("http://purl.org/dc/terms/created")
@@ -167,16 +171,21 @@ func (p *Package) PrintCreated() string {
 
 // NQuads converts the Package to a slice of ld.*Quads
 func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member)*2)
+	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member))
 	copy(doc, base)
+
+	tail := strings.LastIndex(p.Resource, "/")
+	title := ld.NewLiteral(p.Resource[tail+1:], "", "")
 
 	_, s, err := getCid(p.Value)
 	if err != nil {
 		return nil, err
 	}
+
 	value := ld.NewIRI(fmt.Sprintf("dweb:/ipfs/%s", s))
 	extent := strconv.FormatUint(p.Extent, 10)
 	doc = append(doc,
+		ld.NewQuad(subject, titleIri, title, ""),
 		ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(p.Resource), ""),
 		ld.NewQuad(subject, valueIri, value, ""),
 		ld.NewQuad(value, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
@@ -191,6 +200,20 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 		}
 		object := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", r, p.RevisionOfSubject))
 		doc = append(doc, ld.NewQuad(subject, wasRevisionOfIri, object, ""))
+	}
+
+	if p.Description != "" {
+		description := ld.NewLiteral(p.Description, "", "")
+		doc = append(doc, ld.NewQuad(subject, descriptionIri, description, ""))
+	}
+
+	if len(p.Keyword) > 0 {
+		keywords := make([]*ld.Quad, len(p.Keyword))
+		for i, keyword := range p.Keyword {
+			object := ld.NewLiteral(keyword, "", "")
+			keywords[i] = ld.NewQuad(subject, subjectIri, object, "")
+		}
+		doc = append(doc, keywords...)
 	}
 
 	for _, name := range p.Member {

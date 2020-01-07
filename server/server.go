@@ -33,6 +33,8 @@ var linkTypes = map[string]bool{
 
 var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
+var etagRegex = regexp.MustCompile("^\"([a-z2-7]{59})\"$")
+
 var index = "/"
 
 // Server is the main pkgs struct

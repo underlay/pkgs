@@ -99,11 +99,16 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 			return err
 		}
 
-		res.Header().Add("ETag", s)
+		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
+		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE")
+		res.Header().Add("Access-Control-Allow-Headers", "Accept, Link, If-Match")
+		res.Header().Add("Access-Control-Expose-Headers", "Link, ETag")
+
+		res.Header().Add("ETag", fmt.Sprintf("\"%s\"", s))
 		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
+		res.WriteHeader(201) // ???
 
-		res.WriteHeader(201)
 		return nil
 	})
 }
