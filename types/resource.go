@@ -235,10 +235,12 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			if err != nil {
 				return nil, err
 			}
-			uri := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, t.Subject))
+			member := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, t.Subject))
+			uri := ld.NewIRI(t.Resource)
 			doc = append(doc,
-				ld.NewQuad(subject, hadMemberIri, uri, ""),
-				ld.NewQuad(uri, membershipResourceIri, ld.NewIRI(t.Resource), ""),
+				ld.NewQuad(subject, hadMemberIri, member, ""),
+				ld.NewQuad(member, membershipResourceIri, uri, ""),
+				ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
 			)
 		case Message:
 			_, s, err := getCid(t)
@@ -248,8 +250,12 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			member := ld.NewIRI("ul:/ipfs/" + s)
 			doc = append(doc, ld.NewQuad(subject, hadMemberIri, member, ""))
 			if s != name {
-				resource := fmt.Sprintf("%s/%s", p.Resource, name)
-				doc = append(doc, ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(resource), ""))
+				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
+				doc = append(
+					doc,
+					ld.NewQuad(member, membershipResourceIri, uri, ""),
+					ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
+				)
 			}
 		case *File:
 			_, s, err := getCid(t.Value)
@@ -265,8 +271,12 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 				ld.NewQuad(member, formatIri, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
 			)
 			if s != name {
-				resource := fmt.Sprintf("%s/%s", p.Resource, name)
-				doc = append(doc, ld.NewQuad(member, membershipResourceIri, ld.NewIRI(resource), ""))
+				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
+				doc = append(
+					doc,
+					ld.NewQuad(member, membershipResourceIri, uri, ""),
+					ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
+				)
 			}
 		}
 	}
