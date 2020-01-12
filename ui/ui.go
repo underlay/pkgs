@@ -106,11 +106,21 @@ var pageTemplate = `<!DOCTYPE html>
 				{{ end }}
 			</dl>
 		</section>
+		<hr />
+		<form method="POST">
+			<label for="add-file">
+				Add file
+			</label>
+			<input id="add-file" type="file" />
+			<input type="submit" />
+		</form>
 	</body>
 </html>`
 
+// PageTemplate is the template for HTML package pages
 var PageTemplate = template.Must(template.New("page").Parse(pageTemplate))
 
+// MakePage generates a page given a read-only badger transaction and a pathname
 func MakePage(pathname string, p *types.Package, txn *badger.Txn) (*Page, error) {
 	packagePage := &Page{
 		Pathname: pathname,

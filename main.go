@@ -6,7 +6,6 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"regexp"
 
 	ipfs "github.com/ipfs/go-ipfs-http-client"
 
@@ -18,8 +17,6 @@ const defaultHost = "http://localhost:5001"
 var ipfsHost = os.Getenv("IPFS_HOST")
 var pkgsPath = os.Getenv("PKGS_PATH")
 var pkgsRoot = os.Getenv("PKGS_ROOT")
-
-var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
 func main() {
 	if ipfsHost == "" {

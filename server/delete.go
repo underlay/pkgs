@@ -19,7 +19,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	if pathname == "/" {
 		res.WriteHeader(403)
 		return nil
-	} else if !pathRegex.MatchString(pathname) {
+	} else if !PathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}

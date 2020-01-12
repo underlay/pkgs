@@ -14,7 +14,7 @@ import (
 // Head handles HTTP HEAD requests
 func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *http.Request) error {
 	pathname := req.URL.Path
-	if pathname != "/" && !pathRegex.MatchString(pathname) {
+	if pathname != "/" && !PathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}

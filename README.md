@@ -27,7 +27,7 @@ This root URI isn't used for anything other than identifiers in RDF, so it doesn
 % curl -i http://localhost:8086
 HTTP/1.1 200 OK
 Content-Type: application/n-quads
-Etag: bafkreifjc7gebvrm3jbsdjobgpshcfo5twx2suyercykybcrvtwpy5angu
+Etag: "bafkreifjc7gebvrm3jbsdjobgpshcfo5twx2suyercykybcrvtwpy5angu"
 Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"
 Link: <http://www.w3.org/ns/ldp#DirectContainer>; rel="type"
 Link: <#_:c14n0>; rel="self"
@@ -75,7 +75,7 @@ The remote context `ipfs://bafkreifcqgsljpst2fabpvmlzcf5fqdthzvhf4imvqvnymk5iifi
 HTTP/1.1 200 OK
 Content-Length: 640580
 Content-Type: image/gif
-Etag: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4
+Etag: "bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4"
 Link: <http://www.w3.org/ns/ldp#Resource>; rel="type"
 Link: <http://www.w3.org/ns/ldp#NonRDFSource>; rel="type"
 Date: Sat, 07 Dec 2019 07:22:01 GMT
@@ -108,7 +108,7 @@ http://localhost:8086/8-cell-orig.gif
 HTTP/1.1 100 Continue
 
 HTTP/1.1 201 Created
-Etag: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4
+Etag: "bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4"
 Date: Sat, 07 Dec 2019 07:05:16 GMT
 Content-Length: 0
 
@@ -121,7 +121,7 @@ Create (empty) packages with `MKCOL`:
 ```
 % curl -i -X MKCOL http://localhost:8086/bar
 HTTP/1.1 201 Created
-Etag: bafkreif42bur6q7n476a54f55nfnzngojyf3emnm77nzu4aui4swjyrzua
+Etag: "bafkreif42bur6q7n476a54f55nfnzngojyf3emnm77nzu4aui4swjyrzua"
 Date: Tue, 10 Dec 2019 01:22:28 GMT
 Content-Length: 0
 
@@ -155,7 +155,7 @@ Date: Sat, 07 Dec 2019 07:23:09 GMT
 Content-Length: 0
 
 % curl -i -X DELETE \
--H 'If-Match: bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4' \
+-H 'If-Match: "bafybeiatr6vzozvaxtp5f32ghixj4bvauz6wgl4lbbh6np4yrrsvtep3y4"' \
 http://localhost:8086/8-cell-orig.gif
 HTTP/1.1 200 OK
 Date: Sat, 07 Dec 2019 07:25:01 GMT

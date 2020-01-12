@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 	pathname := req.URL.Path
 
-	if pathname != "/" && !pathRegex.MatchString(pathname) {
+	if pathname != "/" && !PathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}
@@ -76,9 +77,11 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	// It's important to check for more than contentType == "text/html" because
 	// some files will have f.Format == "text/html"!
 	if u == types.PackageType && contentType == "text/html" {
-		res.WriteHeader(200)
 		res.Header().Add("Content-Type", contentType)
-		_ = ui.PageTemplate.Execute(res, page)
+		err = ui.PageTemplate.Execute(res, page)
+		if err != nil {
+			log.Println(err)
+		}
 		return nil
 	}
 

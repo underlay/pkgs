@@ -19,7 +19,7 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 	if pathname == "/" {
 		res.WriteHeader(403)
 		return nil
-	} else if !pathRegex.MatchString(pathname) {
+	} else if !PathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}
@@ -100,7 +100,7 @@ func (server *Server) Mkcol(ctx context.Context, res http.ResponseWriter, req *h
 		}
 
 		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE")
+		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, PATCH, DELETE")
 		res.Header().Add("Access-Control-Allow-Headers", "Accept, Link, If-Match")
 		res.Header().Add("Access-Control-Expose-Headers", "Link, ETag")
 

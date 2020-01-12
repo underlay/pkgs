@@ -58,7 +58,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		return nil
 	}
 
-	if !pathRegex.MatchString(pathname) {
+	if !PathRegex.MatchString(pathname) {
 		res.WriteHeader(404)
 		return nil
 	}

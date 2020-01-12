@@ -11,7 +11,7 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	ld "github.com/piprate/json-gold/ld"
+	ld "github.com/underlay/json-gold/ld"
 )
 
 // Resource is interface type for resources (packages, messages, and files)
@@ -32,7 +32,7 @@ func (m Message) ETag() (cid.Cid, string) {
 // URI satisfies the Resource interface
 func (m Message) URI() string {
 	_, s, _ := getCid(m)
-	return fmt.Sprintf("ul:/ipfs/%s", s)
+	return "u:" + s
 }
 
 // ETag satisfies the Resource interface for Packages
@@ -44,7 +44,7 @@ func (p *Package) ETag() (cid.Cid, string) {
 // URI satisfies the Resource interface
 func (p *Package) URI() string {
 	_, s, _ := getCid(p.Id)
-	return fmt.Sprintf("ul:/ipfs/%s#%s", s, p.Subject)
+	return fmt.Sprintf("u:%s#%s", s, p.Subject)
 }
 
 // ETag satisfies the Resource interface for Files
@@ -104,8 +104,8 @@ var hasMemberRelationIri = ld.NewIRI("http://www.w3.org/ns/ldp#hasMemberRelation
 
 var base32 = regexp.MustCompile("^[a-z2-7]{59}$")
 var fileURI = regexp.MustCompile("^dweb:/ipfs/([a-z2-7]{59})$")
-var messageURI = regexp.MustCompile("^ul:/ipfs/([a-z2-7]{59})$")
-var packageURI = regexp.MustCompile("^ul:/ipfs/([a-z2-7]{59})#(_:c14n\\d+)$")
+var messageURI = regexp.MustCompile("^u:([a-z2-7]{59})$")
+var packageURI = regexp.MustCompile("^u:([a-z2-7]{59})#(_:c14n\\d+)$")
 
 var base = []*ld.Quad{
 	ld.NewQuad(subject, typeIri, PackageIri, ""),
@@ -198,7 +198,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 		if err != nil {
 			return nil, err
 		}
-		object := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", r, p.RevisionOfSubject))
+		object := ld.NewIRI(fmt.Sprintf("u:%s#%s", r, p.RevisionOfSubject))
 		doc = append(doc, ld.NewQuad(subject, wasRevisionOfIri, object, ""))
 	}
 
@@ -235,7 +235,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			if err != nil {
 				return nil, err
 			}
-			member := ld.NewIRI(fmt.Sprintf("ul:/ipfs/%s#%s", s, t.Subject))
+			member := ld.NewIRI(fmt.Sprintf("u:%s#%s", s, t.Subject))
 			uri := ld.NewIRI(t.Resource)
 			doc = append(doc,
 				ld.NewQuad(subject, hadMemberIri, member, ""),
@@ -247,7 +247,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			if err != nil {
 				return nil, err
 			}
-			member := ld.NewIRI("ul:/ipfs/" + s)
+			member := ld.NewIRI("u:" + s)
 			doc = append(doc, ld.NewQuad(subject, hadMemberIri, member, ""))
 			if s != name {
 				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))

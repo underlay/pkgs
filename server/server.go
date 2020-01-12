@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -14,8 +15,7 @@ import (
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
-	ld "github.com/piprate/json-gold/ld"
-	loader "github.com/underlay/go-dweb-loader/loader"
+	ld "github.com/underlay/json-gold/ld"
 
 	types "github.com/underlay/pkgs/types"
 )
@@ -31,7 +31,7 @@ var linkTypes = map[string]bool{
 	linkTypeNonRDFSource:    true,
 }
 
-var pathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
+var PathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
 
 var etagRegex = regexp.MustCompile("^\"([a-z2-7]{59})\"$")
 
@@ -72,7 +72,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 			UseNativeTypes: true,
 			Format:         "application/n-quads",
 			Algorithm:      "URDNA2015",
-			DocumentLoader: loader.NewDwebDocumentLoader(api),
+			DocumentLoader: ld.NewDwebDocumentLoader(api),
 		},
 	}
 
@@ -217,7 +217,8 @@ func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
 		// } else if req.Method == "TRACE" {
 		// } else if req.Method == "OPTIONS" {
 		// } else if req.Method == "CONNECT" {
-		// } else if req.Method == "PATCH" {
+	} else if req.Method == "PATCH" {
+		err = server.Patch(ctx, res, req)
 	} else if req.Method == "COPY" {
 	} else if req.Method == "LOCK" {
 	} else if req.Method == "MKCOL" {
@@ -254,13 +255,17 @@ func (server *Server) percolate(
 	m := modified.Format(time.RFC3339)
 
 	for {
-		stat, err = server.object.Stat(ctx, value)
-		if err != nil {
-			return
+
+		if value != nil {
+			stat, err = server.object.Stat(ctx, value)
+			if err != nil {
+				return
+			}
+
+			p.Extent = uint64(stat.CumulativeSize)
+			p.Value = value.Cid().Bytes()
 		}
 
-		p.Extent = uint64(stat.CumulativeSize)
-		p.Value = value.Cid().Bytes()
 		p.Modified = m
 		p.RevisionOf = p.Id
 		p.RevisionOfSubject = p.Subject
@@ -277,15 +282,17 @@ func (server *Server) percolate(
 		}
 
 		if pathname == "/" {
-			s, err = oldValue.Cid().StringOfBase(multibase.Base32)
-			if err != nil {
-				return
-			}
+			if value != nil {
+				s, err = oldValue.Cid().StringOfBase(multibase.Base32)
+				if err != nil {
+					return
+				}
 
-			unpin := options.Pin.Unpin(s != types.EmptyDirectory)
-			err = server.pin.Update(ctx, oldValue, value, unpin)
-			if err != nil {
-				return
+				unpin := options.Pin.Unpin(s != types.EmptyDirectory)
+				err = server.pin.Update(ctx, oldValue, value, unpin)
+				if err != nil {
+					return
+				}
 			}
 
 			err = server.pin.Update(ctx, oldID, id)
@@ -326,4 +333,28 @@ func (server *Server) percolate(
 			return
 		}
 	}
+}
+
+func (server *Server) parseDataset(body io.Reader, contentType string) (quads []*ld.Quad, err error) {
+	var rdf interface{}
+	if contentType == "application/n-quads" {
+		ns := &ld.NQuadRDFSerializer{}
+		rdf, err = ns.Parse(body)
+		if err != nil {
+			return
+		}
+	} else if contentType == "application/ld+json" {
+		opts := ld.NewJsonLdOptions("")
+		opts.DocumentLoader = server.opts.DocumentLoader
+		rdf, err = server.proc.ToRDF(body, opts)
+		if err != nil {
+			return
+		}
+	} else {
+		return nil, nil
+	}
+
+	na := ld.NewNormalisationAlgorithm(server.opts.Algorithm)
+	na.Normalize(rdf.(*ld.RDFDataset))
+	return na.Quads(), nil
 }
