@@ -49,26 +49,15 @@ func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *ht
 		return nil
 	}
 
-	res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
-
 	switch t := resource.(type) {
 	case *types.Package:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Accept, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag")
 		res.Header().Add("Link", linkTypeDirectContainer)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, t.Subject))
 		res.Header().Add("Content-Type", "application/n-quads")
 	case types.Message:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag")
 		res.Header().Add("Link", linkTypeRDFSource)
 		res.Header().Add("Content-Type", "application/n-quads")
 	case *types.File:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag, Content-Length")
 		res.Header().Add("Link", linkTypeNonRDFSource)
 		extent := strconv.FormatUint(t.Extent, 10)
 		res.Header().Add("Content-Type", t.Format)

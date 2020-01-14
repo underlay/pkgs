@@ -268,10 +268,6 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		}
 
 		res.Header().Add("ETag", fmt.Sprintf("\"%s\"", etag))
-		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Accept, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "ETag")
 		if mutation {
 			res.WriteHeader(200)
 		} else {

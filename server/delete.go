@@ -152,9 +152,6 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 			return err
 		}
 
-		res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
-		res.Header().Add("Access-Control-Allow-Methods", "MKCOL, PUT")
-		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Link, If-Match")
 		res.WriteHeader(204)
 		return nil
 	})

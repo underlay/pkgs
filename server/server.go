@@ -208,15 +208,12 @@ func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
 		err = server.Get(ctx, res, req)
 	} else if req.Method == "HEAD" {
 		err = server.Head(ctx, res, req)
-		// } else if req.Method == "POST" {
-		// 	err = server.Post(ctx, res, req)
+	} else if req.Method == "POST" {
+		err = server.Post(ctx, res, req)
 	} else if req.Method == "PUT" {
 		err = server.Put(ctx, res, req)
 	} else if req.Method == "DELETE" {
 		err = server.Delete(ctx, res, req)
-		// } else if req.Method == "TRACE" {
-		// } else if req.Method == "OPTIONS" {
-		// } else if req.Method == "CONNECT" {
 	} else if req.Method == "PATCH" {
 		err = server.Patch(ctx, res, req)
 	} else if req.Method == "COPY" {
@@ -224,8 +221,6 @@ func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
 	} else if req.Method == "MKCOL" {
 		err = server.Mkcol(ctx, res, req)
 	} else if req.Method == "MOVE" {
-		// } else if req.Method == "PROPFIND" {
-		// } else if req.Method == "PROPPATCH" {
 	} else if req.Method == "UNLOCK" {
 	} else {
 		res.WriteHeader(405)

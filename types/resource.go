@@ -12,6 +12,8 @@ import (
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	ld "github.com/underlay/json-gold/ld"
+
+	v "github.com/underlay/pkgs/vocab"
 )
 
 // Resource is interface type for resources (packages, messages, and files)
@@ -81,26 +83,14 @@ const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf
 // PackageIri is an rdf:type for Underlay Packages
 var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 
-const dateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
-
 // EmptyDirectoryCID is the CID instance of EmptyDirectory
 var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
 
 var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
 var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
-var titleIri = ld.NewIRI("http://purl.org/dc/terms/title")
-var descriptionIri = ld.NewIRI("http://purl.org/dc/terms/description")
-var subjectIri = ld.NewIRI("http://purl.org/dc/terms/subject")
-var extentIri = ld.NewIRI("http://purl.org/dc/terms/extent")
-var formatIri = ld.NewIRI("http://purl.org/dc/terms/format")
-var createdIri = ld.NewIRI("http://purl.org/dc/terms/created")
-var modifiedIri = ld.NewIRI("http://purl.org/dc/terms/modified")
+
 var typeIri = ld.NewIRI(ld.RDFType)
-var hadMemberIri = ld.NewIRI("http://www.w3.org/ns/prov#hadMember")
-var wasRevisionOfIri = ld.NewIRI("http://www.w3.org/ns/prov#wasRevisionOf")
-var membershipResourceIri = ld.NewIRI("http://www.w3.org/ns/ldp#membershipResource")
-var hasMemberRelationIri = ld.NewIRI("http://www.w3.org/ns/ldp#hasMemberRelation")
 
 var base32 = regexp.MustCompile("^[a-z2-7]{59}$")
 var fileURI = regexp.MustCompile("^dweb:/ipfs/([a-z2-7]{59})$")
@@ -109,7 +99,7 @@ var packageURI = regexp.MustCompile("^u:([a-z2-7]{59})#(_:c14n\\d+)$")
 
 var base = []*ld.Quad{
 	ld.NewQuad(subject, typeIri, PackageIri, ""),
-	ld.NewQuad(subject, hasMemberRelationIri, hadMemberIri, ""),
+	ld.NewQuad(subject, v.LDPhasMemberRelation, v.PROVhadMember, ""),
 }
 
 // NewPackage creates a new timestamped package.
@@ -137,16 +127,16 @@ var ErrNotPackage = fmt.Errorf("Unexpected non-package resource")
 
 // Paths is a convenience method for getting the path.Resolved version
 // of a packages ID and Value CIDs at the same time.
-func (p *Package) Paths() (path.Resolved, path.Resolved, error) {
-	id, err := cid.Cast(p.Id)
+func (p *Package) Paths() (id path.Resolved, value path.Resolved, err error) {
+	cidID, err := cid.Cast(p.Id)
 	if err != nil {
 		return nil, nil, err
 	}
-	value, err := cid.Cast(p.Value)
+	cidValue, err := cid.Cast(p.Value)
 	if err != nil {
 		return nil, nil, err
 	}
-	return path.IpfsPath(id), path.IpfsPath(value), nil
+	return path.IpfsPath(cidID), path.IpfsPath(cidValue), nil
 }
 
 // ValueURI returns the dweb URI for the package value
@@ -185,12 +175,12 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	value := ld.NewIRI(fmt.Sprintf("dweb:/ipfs/%s", s))
 	extent := strconv.FormatUint(p.Extent, 10)
 	doc = append(doc,
-		ld.NewQuad(subject, titleIri, title, ""),
-		ld.NewQuad(subject, membershipResourceIri, ld.NewIRI(p.Resource), ""),
+		ld.NewQuad(subject, v.DCTERMStitle, title, ""),
+		ld.NewQuad(subject, v.LDPmembershipResource, ld.NewIRI(p.Resource), ""),
 		ld.NewQuad(subject, valueIri, value, ""),
-		ld.NewQuad(value, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-		ld.NewQuad(subject, createdIri, ld.NewLiteral(p.Created, dateTime, ""), ""),
-		ld.NewQuad(subject, modifiedIri, ld.NewLiteral(p.Modified, dateTime, ""), ""),
+		ld.NewQuad(value, v.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
+		ld.NewQuad(subject, v.DCTERMScreated, ld.NewLiteral(p.Created, v.XSDdateTime, ""), ""),
+		ld.NewQuad(subject, v.DCTERMSmodified, ld.NewLiteral(p.Modified, v.XSDdateTime, ""), ""),
 	)
 
 	if p.RevisionOf != nil && p.RevisionOfSubject != "" {
@@ -199,19 +189,19 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			return nil, err
 		}
 		object := ld.NewIRI(fmt.Sprintf("u:%s#%s", r, p.RevisionOfSubject))
-		doc = append(doc, ld.NewQuad(subject, wasRevisionOfIri, object, ""))
+		doc = append(doc, ld.NewQuad(subject, v.PROVwasRevisionOf, object, ""))
 	}
 
 	if p.Description != "" {
 		description := ld.NewLiteral(p.Description, "", "")
-		doc = append(doc, ld.NewQuad(subject, descriptionIri, description, ""))
+		doc = append(doc, ld.NewQuad(subject, v.DCTERMSdescription, description, ""))
 	}
 
 	if len(p.Keyword) > 0 {
 		keywords := make([]*ld.Quad, len(p.Keyword))
 		for i, keyword := range p.Keyword {
 			object := ld.NewLiteral(keyword, "", "")
-			keywords[i] = ld.NewQuad(subject, subjectIri, object, "")
+			keywords[i] = ld.NewQuad(subject, v.DCTERMSsubject, object, "")
 		}
 		doc = append(doc, keywords...)
 	}
@@ -238,9 +228,9 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			member := ld.NewIRI(fmt.Sprintf("u:%s#%s", s, t.Subject))
 			uri := ld.NewIRI(t.Resource)
 			doc = append(doc,
-				ld.NewQuad(subject, hadMemberIri, member, ""),
-				ld.NewQuad(member, membershipResourceIri, uri, ""),
-				ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
+				ld.NewQuad(subject, v.PROVhadMember, member, ""),
+				ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
+				ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
 			)
 		case Message:
 			_, s, err := getCid(t)
@@ -248,13 +238,13 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 				return nil, err
 			}
 			member := ld.NewIRI("u:" + s)
-			doc = append(doc, ld.NewQuad(subject, hadMemberIri, member, ""))
+			doc = append(doc, ld.NewQuad(subject, v.PROVhadMember, member, ""))
 			if s != name {
 				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
 				doc = append(
 					doc,
-					ld.NewQuad(member, membershipResourceIri, uri, ""),
-					ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
+					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
+					ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
 				)
 			}
 		case *File:
@@ -266,16 +256,16 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			member := ld.NewIRI("dweb:/ipfs/" + s)
 			extent := strconv.FormatUint(t.Extent, 10)
 			doc = append(doc,
-				ld.NewQuad(subject, hadMemberIri, member, ""),
-				ld.NewQuad(member, extentIri, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-				ld.NewQuad(member, formatIri, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
+				ld.NewQuad(subject, v.PROVhadMember, member, ""),
+				ld.NewQuad(member, v.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
+				ld.NewQuad(member, v.DCTERMSformat, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
 			)
 			if s != name {
 				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
 				doc = append(
 					doc,
-					ld.NewQuad(member, membershipResourceIri, uri, ""),
-					ld.NewQuad(member, titleIri, ld.NewLiteral(name, "", ""), ""),
+					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
+					ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
 				)
 			}
 		}

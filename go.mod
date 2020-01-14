@@ -13,5 +13,6 @@ require (
 	github.com/ipfs/interface-go-ipfs-core v0.2.5
 	github.com/joeltg/negotiate v0.0.0-20191219004959-535b71e7e11c
 	github.com/multiformats/go-multibase v0.0.1
+	github.com/rs/cors v1.7.0
 	github.com/underlay/json-gold v0.2.1-0.20200110173653-0fe9d89e424e
 )

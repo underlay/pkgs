@@ -103,15 +103,9 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 	file := files.ToFile(node)
 
-	res.Header().Add("Access-Control-Allow-Origin", "http://localhost:8000")
-
 	// Okay now we have a Resource and we get to respond with its representation
 	switch t := resource.(type) {
 	case *types.Package:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, POST, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Accept, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag")
-
 		contentDisposition := fmt.Sprintf("attachment; filename=%s.nt", name)
 		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeDirectContainer)
@@ -142,10 +136,6 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 			_, _ = io.Copy(res, file)
 		}
 	case types.Message:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Accept, Content-Type, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag")
-
 		contentDisposition := fmt.Sprintf("attachment; filename=%s.nt", name)
 		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeNonRDFSource)
@@ -163,10 +153,6 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 			_, _ = io.Copy(res, file)
 		}
 	case *types.File:
-		res.Header().Add("Access-Control-Allow-Methods", "GET, HEAD, PUT, DELETE")
-		res.Header().Add("Access-Control-Allow-Headers", "Content-Type, Link, If-Match")
-		res.Header().Add("Access-Control-Expose-Headers", "Link, Content-Type, ETag, Content-Length")
-
 		contentDisposition := fmt.Sprintf("attachment; filename=%s", name)
 		res.Header().Add("Content-Disposition", contentDisposition)
 		res.Header().Add("Link", linkTypeNonRDFSource)

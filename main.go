@@ -8,6 +8,7 @@ import (
 	"os"
 
 	ipfs "github.com/ipfs/go-ipfs-http-client"
+	cors "github.com/rs/cors"
 
 	pkgs "github.com/underlay/pkgs/server"
 )
@@ -47,7 +48,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	http.HandleFunc("/", server.Handle)
-	log.Printf("http://localhost:8086\n")
-	log.Fatal(http.ListenAndServe(":8086", nil))
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", server.Handle)
+	handler := cors.New(cors.Options{
+		AllowCredentials: false,
+		AllowedMethods: []string{
+			http.MethodGet,
+			http.MethodPost,
+			http.MethodPatch,
+			http.MethodPut,
+			http.MethodHead,
+			http.MethodDelete,
+			"MKCOL",
+			"MOVE",
+			"COPY",
+		},
+		AllowedHeaders: []string{"Link", "If-Match", "If-None-Match", "Content-Type", "Accept"},
+		ExposedHeaders: []string{"Content-Type", "Link", "ETag", "Content-Disposition", "Content-Length"},
+		Debug:          true,
+	}).Handler(mux)
+
+	log.Println("http://localhost:8086")
+	log.Fatal(http.ListenAndServe(":8086", handler))
 }
