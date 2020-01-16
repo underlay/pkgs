@@ -170,6 +170,8 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		}
 
 		_, newETag := p.ETag()
+		valueURI := ld.NewIRI(p.ValueURI())
+		extent := strconv.FormatUint(p.Extent, 10)
 
 		res.Header().Add("Content-Type", accept)
 		res.Header().Add("Link", fmt.Sprintf(`<#%s>; rel="self"`, p.Subject))
@@ -180,6 +182,8 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		rdf := ld.NewRDFDataset()
 		rdf.Graphs["@default"] = append(
 			rdf.Graphs["@default"],
+			ld.NewQuad(s, vocab.PROVvalue, valueURI, ""),
+			ld.NewQuad(valueURI, vocab.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
 			ld.NewQuad(s, vocab.PROVwasRevisionOf, ld.NewIRI(oldURI), ""),
 			ld.NewQuad(s, vocab.DCTERMSmodified, ld.NewLiteral(p.Modified, vocab.XSDdateTime, ""), ""),
 		)
