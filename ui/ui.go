@@ -137,7 +137,7 @@ func MakePage(pathname string, p *types.Package, txn *badger.Txn) (*Page, error)
 		} else {
 			memberPath = fmt.Sprintf("%s/%s", pathname, member)
 		}
-		resource, _, err := types.GetResource(memberPath, txn)
+		resource, err := types.GetResource(memberPath, txn)
 		if err != nil {
 			return nil, err
 		}
