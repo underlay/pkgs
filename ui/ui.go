@@ -41,7 +41,7 @@ var pageTemplate = `<!DOCTYPE html>
 		}
 		body {
 			max-width: max-content;
-			margin: auto;
+			margin: 1em auto;
 		}
 		table {
 			border-spacing: 0 2px;
@@ -107,12 +107,12 @@ var pageTemplate = `<!DOCTYPE html>
 			</dl>
 		</section>
 		<hr />
-		<form method="POST">
-			<label for="add-file">
-				Add file
+		<form method="POST" enctype="multipart/form-data">
+			<label>
+				Add files:
+				<input type="file" name="file" multiple />
 			</label>
-			<input id="add-file" type="file" />
-			<input type="submit" />
+			<input type="submit" value="Submit" />
 		</form>
 	</body>
 </html>`
