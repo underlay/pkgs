@@ -20,3 +20,7 @@ var DCTERMSmodified = ld.NewIRI("http://purl.org/dc/terms/modified")
 var DCTERMScreated = ld.NewIRI("http://purl.org/dc/terms/created")
 
 const XSDdateTime = "http://www.w3.org/2001/XMLSchema#dateTime"
+
+func MakeURI(root string, fragment string) string {
+	return "u:" + root + fragment
+}

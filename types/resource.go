@@ -34,7 +34,7 @@ func (m Message) ETag() (cid.Cid, string) {
 // URI satisfies the Resource interface
 func (m Message) URI() string {
 	_, s, _ := getCid(m)
-	return "u:" + s
+	return v.MakeURI(s, "")
 }
 
 // ETag satisfies the Resource interface for Packages
@@ -46,7 +46,7 @@ func (p *Package) ETag() (cid.Cid, string) {
 // URI satisfies the Resource interface
 func (p *Package) URI() string {
 	_, s, _ := getCid(p.Id)
-	return fmt.Sprintf("u:%s#%s", s, p.Subject)
+	return v.MakeURI(s, "#"+p.Subject)
 }
 
 // ETag satisfies the Resource interface for Files
@@ -58,7 +58,7 @@ func (f *File) ETag() (cid.Cid, string) {
 // URI satisfies the Resource interface
 func (f *File) URI() string {
 	_, s, _ := getCid(f.Value)
-	return fmt.Sprintf("dweb:/ipfs/%s", s)
+	return "dweb:/ipfs/" + s
 }
 
 // ResourceType is an enum for resource types
@@ -86,9 +86,7 @@ var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
 // EmptyDirectoryCID is the CID instance of EmptyDirectory
 var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
 
-var emptyDirectoryURI = fmt.Sprintf("dweb:/ipfs/%s", EmptyDirectory)
 var subject = ld.NewBlankNode("_:b0")
-var valueIri = ld.NewIRI("http://www.w3.org/ns/prov#value")
 
 var typeIri = ld.NewIRI(ld.RDFType)
 
@@ -172,12 +170,12 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 		return nil, err
 	}
 
-	value := ld.NewIRI(fmt.Sprintf("dweb:/ipfs/%s", s))
+	value := ld.NewIRI("dweb:/ipfs/" + s)
 	extent := strconv.FormatUint(p.Extent, 10)
 	doc = append(doc,
 		ld.NewQuad(subject, v.DCTERMStitle, title, ""),
 		ld.NewQuad(subject, v.LDPmembershipResource, ld.NewIRI(p.Resource), ""),
-		ld.NewQuad(subject, valueIri, value, ""),
+		ld.NewQuad(subject, v.PROVvalue, value, ""),
 		ld.NewQuad(value, v.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
 		ld.NewQuad(subject, v.DCTERMScreated, ld.NewLiteral(p.Created, v.XSDdateTime, ""), ""),
 		ld.NewQuad(subject, v.DCTERMSmodified, ld.NewLiteral(p.Modified, v.XSDdateTime, ""), ""),
@@ -188,7 +186,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 		if err != nil {
 			return nil, err
 		}
-		object := ld.NewIRI(fmt.Sprintf("u:%s#%s", r, p.RevisionOfSubject))
+		object := ld.NewIRI(v.MakeURI(r, "#"+p.RevisionOfSubject))
 		doc = append(doc, ld.NewQuad(subject, v.PROVwasRevisionOf, object, ""))
 	}
 
@@ -207,11 +205,9 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 	}
 
 	for _, name := range p.Member {
-		var key string
-		if pathname == "/" {
-			key = "/" + name
-		} else {
-			key = fmt.Sprintf("%s/%s", pathname, name)
+		key := "/" + name
+		if pathname != "/" {
+			key = pathname + key
 		}
 
 		resource, _, err := GetResource(key, txn)
@@ -225,7 +221,8 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			if err != nil {
 				return nil, err
 			}
-			member := ld.NewIRI(fmt.Sprintf("u:%s#%s", s, t.Subject))
+
+			member := ld.NewIRI(v.MakeURI(s, "#"+t.Subject))
 			uri := ld.NewIRI(t.Resource)
 			doc = append(doc,
 				ld.NewQuad(subject, v.PROVhadMember, member, ""),
@@ -237,10 +234,10 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			if err != nil {
 				return nil, err
 			}
-			member := ld.NewIRI("u:" + s)
+			member := ld.NewIRI(v.MakeURI(s, ""))
 			doc = append(doc, ld.NewQuad(subject, v.PROVhadMember, member, ""))
 			if s != name {
-				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
+				uri := ld.NewIRI(p.Resource + "/" + name)
 				doc = append(
 					doc,
 					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
@@ -261,7 +258,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 				ld.NewQuad(member, v.DCTERMSformat, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
 			)
 			if s != name {
-				uri := ld.NewIRI(fmt.Sprintf("%s/%s", p.Resource, name))
+				uri := ld.NewIRI(p.Resource + "/" + name)
 				doc = append(
 					doc,
 					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
