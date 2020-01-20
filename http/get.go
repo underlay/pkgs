@@ -59,7 +59,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 		// It's a little awkward to render the HTML for the web ui here,
 		// but it's the best way to do it
-		contentType = content.NegotiateContentType(req, offers[query.FileType], defaultOffer)
+		contentType = content.NegotiateContentType(req, offers[query.PackageType], defaultOffer)
 		if p, is := resource.(*types.Package); is && contentType == "text/html" {
 			page, err = ui.MakePage(pathname, p, txn)
 		}

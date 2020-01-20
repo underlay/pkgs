@@ -10,7 +10,7 @@ import (
 	ipfs "github.com/ipfs/go-ipfs-http-client"
 	cors "github.com/rs/cors"
 
-	pkgs "github.com/underlay/pkgs/server"
+	pkgs "github.com/underlay/pkgs/http"
 )
 
 const defaultHost = "http://localhost:5001"

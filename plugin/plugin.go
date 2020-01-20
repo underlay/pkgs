@@ -12,7 +12,7 @@ import (
 	core "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 
-	pkgs "github.com/underlay/pkgs/server"
+	pkgs "github.com/underlay/pkgs/http"
 	types "github.com/underlay/pkgs/types"
 )
 
