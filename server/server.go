@@ -17,6 +17,7 @@ import (
 	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/underlay/json-gold/ld"
 
+	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -31,7 +32,8 @@ var linkTypes = map[string]bool{
 	linkTypeNonRDFSource:    true,
 }
 
-var PathRegex = regexp.MustCompile("^(/[a-zA-Z0-9-\\.]+)+$")
+// PathRegex validates URI path segments (conservatively for now)
+var PathRegex = regexp.MustCompile("^(/[a-zA-Z0-9_\\-\\.]+)+$")
 
 var etagRegex = regexp.MustCompile("^\"([a-z2-7]{59})\"$")
 
@@ -84,11 +86,11 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		return nil, err
 	}
 
-	var u types.ResourceType
+	var u query.ResourceType
 	err = db.View(func(txn *badger.Txn) error {
 		item, err := txn.Get([]byte(index))
 		if err == nil {
-			u = types.ResourceType(item.UserMeta())
+			u = query.ResourceType(item.UserMeta())
 		}
 		return err
 	})
@@ -154,7 +156,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		}
 	} else if err != nil {
 		return nil, err
-	} else if u != types.PackageType {
+	} else if u != query.PackageType {
 		return nil, types.ErrNotPackage
 	}
 

@@ -13,6 +13,7 @@ import (
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 
+	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -120,7 +121,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		var leaf path.Resolved
 		var mutation bool
 		var etag string
-		var value types.Resource
+		var value query.Resource
 
 		for _, member := range parent.Member {
 			if member == name {
@@ -131,7 +132,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 
 		if mutation {
 			// The resource already exists!
-			resource, _, err := types.GetResource(pathname, txn)
+			resource, err := types.GetResource(pathname, txn)
 			if err != nil {
 				res.WriteHeader(500)
 				return err

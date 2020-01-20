@@ -10,6 +10,7 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 
+	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -44,7 +45,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	match := etagRegex.FindStringSubmatch(ifMatch)[1]
 
 	return server.db.Update(func(txn *badger.Txn) error {
-		r, u, err := types.GetResource(pathname, txn)
+		r, err := types.GetResource(pathname, txn)
 		if err == badger.ErrKeyNotFound {
 			res.WriteHeader(404)
 			return nil
@@ -108,7 +109,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		_ = txn.Delete([]byte(pathname))
 
 		// Also remove the direct object for packages
-		if u == types.PackageType {
+		if r.Type() == query.PackageType {
 			_ = txn.Delete([]byte(pathname + ".nt"))
 			value, err = server.object.RmLink(ctx, value, name+".nt")
 			if err != nil {

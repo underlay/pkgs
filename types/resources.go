@@ -13,17 +13,17 @@ import (
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	ld "github.com/underlay/json-gold/ld"
 
+	query "github.com/underlay/pkgs/query"
 	v "github.com/underlay/pkgs/vocab"
 )
 
-// Resource is interface type for resources (packages, messages, and files)
-type Resource interface {
-	ETag() (cid.Cid, string)
-	URI() string
-}
-
 // A Message is just the bytes of a CID
 type Message []byte
+
+// Type exposes the message resource type
+func (m Message) Type() query.ResourceType {
+	return query.MessageType
+}
 
 // ETag satisfies the Resource interface
 func (m Message) ETag() (cid.Cid, string) {
@@ -35,6 +35,11 @@ func (m Message) ETag() (cid.Cid, string) {
 func (m Message) URI() string {
 	_, s, _ := getCid(m)
 	return v.MakeURI(s, "")
+}
+
+// Type exposes the package resource type
+func (p *Package) Type() query.ResourceType {
+	return query.PackageType
 }
 
 // ETag satisfies the Resource interface for Packages
@@ -49,6 +54,11 @@ func (p *Package) URI() string {
 	return v.MakeURI(s, "#"+p.Subject)
 }
 
+// Type exposes the file resource type
+func (f *File) Type() query.ResourceType {
+	return query.FileType
+}
+
 // ETag satisfies the Resource interface for Files
 func (f *File) ETag() (cid.Cid, string) {
 	c, s, _ := getCid(f.Value)
@@ -60,18 +70,6 @@ func (f *File) URI() string {
 	_, s, _ := getCid(f.Value)
 	return "dweb:/ipfs/" + s
 }
-
-// ResourceType is an enum for resource types
-type ResourceType uint8
-
-const (
-	// PackageType the ResourceType for Packages
-	PackageType ResourceType = iota
-	// MessageType the ResourceType for Messages
-	MessageType
-	// FileType is the ResourceType for Files
-	FileType
-)
 
 const defaultSubject = "_:c14n0"
 
@@ -210,7 +208,7 @@ func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
 			key = pathname + key
 		}
 
-		resource, _, err := GetResource(key, txn)
+		resource, err := GetResource(key, txn)
 		if err != nil {
 			return nil, err
 		}

@@ -1,4 +1,4 @@
-package types
+package query
 
 // An Index is the interface for database indices
 type Index interface {

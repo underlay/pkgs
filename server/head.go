@@ -8,6 +8,7 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 
+	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -21,9 +22,9 @@ func (server *Server) Head(ctx context.Context, res http.ResponseWriter, req *ht
 
 	ifNoneMatch := req.Header.Get("If-None-Match")
 
-	var resource types.Resource
+	var resource query.Resource
 	err := server.db.View(func(txn *badger.Txn) (err error) {
-		resource, _, err = types.GetResource(pathname, txn)
+		resource, err = types.GetResource(pathname, txn)
 		return
 	})
 

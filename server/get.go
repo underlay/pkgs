@@ -15,16 +15,17 @@ import (
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	content "github.com/joeltg/negotiate/content"
 
+	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
 	ui "github.com/underlay/pkgs/ui"
 )
 
 // var defaultContentType = "application/n-quads"
 
-var offers = map[types.ResourceType][]string{
-	types.PackageType: []string{"application/n-quads", "application/ld+json", "text/html"},
-	types.MessageType: []string{"application/n-quads", "application/ld+json"},
-	types.FileType:    []string{},
+var offers = map[query.ResourceType][]string{
+	query.PackageType: []string{"application/n-quads", "application/ld+json", "text/html"},
+	query.MessageType: []string{"application/n-quads", "application/ld+json"},
+	query.FileType:    []string{},
 }
 
 // Get handles HTTP GET requests
@@ -47,19 +48,18 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 	}
 
 	var contentType string
-	var resource types.Resource
-	var u types.ResourceType
+	var resource query.Resource
 	var page *ui.Page
 	err := server.db.View(func(txn *badger.Txn) (err error) {
-		resource, u, err = types.GetResource(pathname, txn)
+		resource, err = types.GetResource(pathname, txn)
 		defaultOffer := "application/n-quads"
-		if f, is := resource.(*types.File); is && u == types.FileType {
+		if f, is := resource.(*types.File); is {
 			defaultOffer = f.Format
 		}
 
 		// It's a little awkward to render the HTML for the web ui here,
 		// but it's the best way to do it
-		contentType = content.NegotiateContentType(req, offers[u], defaultOffer)
+		contentType = content.NegotiateContentType(req, offers[query.FileType], defaultOffer)
 		if p, is := resource.(*types.Package); is && contentType == "text/html" {
 			page, err = ui.MakePage(pathname, p, txn)
 		}
@@ -76,7 +76,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 	// It's important to check for more than contentType == "text/html" because
 	// some files will have f.Format == "text/html"!
-	if u == types.PackageType && contentType == "text/html" {
+	if resource.Type() == query.PackageType && contentType == "text/html" {
 		res.Header().Add("Content-Type", contentType)
 		err = ui.PageTemplate.Execute(res, page)
 		if err != nil {
