@@ -19,12 +19,19 @@ type Page struct {
 	Files    map[string]*types.File
 }
 
-// Path splits the pathname into a slice of path elements
-func (p *Page) Path() []string {
+// Paths splits the pathname into a slice of path elements
+func (p *Page) Paths() []string {
 	if p.Pathname == "/" {
 		return nil
 	}
-	return strings.Split(p.Pathname[1:], "/")
+	components := strings.Split(p.Pathname[1:], "/")
+
+	// var prev string
+	// for i, component := range components {
+	// 	components[i] = prev + "/" + component
+	// 	prev = components[i]
+	// }
+	return components
 }
 
 var pageTemplate = `<!DOCTYPE html>
@@ -57,7 +64,12 @@ var pageTemplate = `<!DOCTYPE html>
 		<header>
 			<h1>
 				<a href="/">●</a>
-				{{ range $index, $element := .Path }} / <a href={{ $element }}>{{ $element }}</a>{{ end }}
+				{{ $paths := split .Pathname "/" }}
+				{{ range $index, $element := $paths }}
+					{{ if ne $index 0 }}
+						/ <a href="{{ join (slice $paths 0 $index) "/"}}/{{ $element }}">{{ $element }}</a>
+					{{ end }}
+				{{ end }}
 			</h1>
 		</header>
 		<table>
@@ -71,8 +83,12 @@ var pageTemplate = `<!DOCTYPE html>
 		<section>
 			<h2>Packages</h2>
 			<dl>
+				{{ $p := .Pathname }}
+				{{ if eq .Pathname "/" }}
+					{{ $p = "" }}
+				{{ end }}
 				{{ range $key, $value := .Packages }}
-				<dt><a href="{{ $key }}">{{ $key }}</a></dt>
+				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
 				<dd><pre>{{ $value.URI }}</pre></dd>
 				{{ else }}
 				No packages
@@ -83,6 +99,9 @@ var pageTemplate = `<!DOCTYPE html>
 			<h2>Messages</h2>
 			<dl>
 				{{ $p := .Pathname }}
+				{{ if eq .Pathname "/" }}
+					{{ $p = "" }}
+				{{ end }}
 				{{ range $key, $value := .Messages }}
 				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
 				<dd><pre>{{ $value.URI }}</pre></dd>
@@ -94,8 +113,12 @@ var pageTemplate = `<!DOCTYPE html>
 		<section>
 			<h2>Files</h2>
 			<dl>
+				{{ $p := .Pathname }}
+				{{ if eq .Pathname "/" }}
+					{{ $p = "" }}
+				{{ end }}
 				{{ range $key, $value := .Files }}
-				<dt><a href="{{ $key }}">{{ $key }}</a></dt>
+				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
 				<dd>
 					<pre>{{ $value.URI }}</pre>
 					<pre>{{ $value.Format }}</pre>
@@ -117,8 +140,13 @@ var pageTemplate = `<!DOCTYPE html>
 	</body>
 </html>`
 
+var funcs = template.FuncMap{
+	"join":  strings.Join,
+	"split": strings.Split,
+}
+
 // PageTemplate is the template for HTML package pages
-var PageTemplate = template.Must(template.New("page").Parse(pageTemplate))
+var PageTemplate = template.Must(template.New("page").Funcs(funcs).Parse(pageTemplate))
 
 // MakePage generates a page given a read-only badger transaction and a pathname
 func MakePage(pathname string, p *types.Package, txn *badger.Txn) (*Page, error) {
