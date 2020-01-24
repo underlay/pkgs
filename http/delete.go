@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"context"
@@ -109,7 +109,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 		_ = txn.Delete([]byte(pathname))
 
 		// Also remove the direct object for packages
-		if r.Type() == query.PackageType {
+		if r.Type() == query.Package {
 			_ = txn.Delete([]byte(pathname + ".nt"))
 			value, err = server.object.RmLink(ctx, value, name+".nt")
 			if err != nil {

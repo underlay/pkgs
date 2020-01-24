@@ -13,10 +13,10 @@ type Resource interface {
 type ResourceType uint8
 
 const (
-	// PackageType the ResourceType for Packages
-	PackageType ResourceType = iota
-	// MessageType the ResourceType for Messages
-	MessageType
-	// FileType is the ResourceType for Files
-	FileType
+	// Package the ResourceType for Packages
+	Package ResourceType = iota
+	// Message the ResourceType for Messages
+	Message
+	// File is the ResourceType for Files
+	File
 )

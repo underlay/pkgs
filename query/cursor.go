@@ -4,6 +4,7 @@ import ld "github.com/underlay/json-gold/ld"
 
 // A Cursor is an interactive query interface
 type Cursor interface {
+	Len() int
 	Graph() []*ld.Quad
 	Get(node *ld.BlankNode) ld.Node
 	Domain() []*ld.BlankNode

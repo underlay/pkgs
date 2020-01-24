@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"context"
@@ -50,6 +50,11 @@ type Server struct {
 	proc     *ld.JsonLdProcessor
 	opts     *ld.JsonLdOptions
 	locks    map[string]*sync.Mutex
+}
+
+// Close the underlying badger database
+func (server *Server) Close() {
+	server.db.Close()
 }
 
 // Initialize opens the Badger database and writes an empty root package if none exists
@@ -156,7 +161,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 		}
 	} else if err != nil {
 		return nil, err
-	} else if u != query.PackageType {
+	} else if u != query.Package {
 		return nil, types.ErrNotPackage
 	}
 
@@ -202,8 +207,8 @@ func (server *Server) Normalize(
 	return
 }
 
-// Handle handles HTTP requests using the database and core API
-func (server *Server) Handle(res http.ResponseWriter, req *http.Request) {
+// ServeHTTP handles HTTP requests using the database and core API
+func (server *Server) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	var err error
 	ctx := context.TODO()
 	if req.Method == "GET" {

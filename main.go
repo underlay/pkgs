@@ -6,11 +6,13 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 
 	ipfs "github.com/ipfs/go-ipfs-http-client"
 	cors "github.com/rs/cors"
 
 	pkgs "github.com/underlay/pkgs/http"
+	rpc "github.com/underlay/pkgs/rpc"
 )
 
 const defaultHost = "http://localhost:5001"
@@ -23,6 +25,8 @@ func main() {
 	if ipfsHost == "" {
 		ipfsHost = defaultHost
 	}
+
+	go rpc.ServeRPC()
 
 	api, err := ipfs.NewURLApiWithClient(ipfsHost, http.DefaultClient)
 	if err != nil {
@@ -48,8 +52,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", server.Handle)
 	handler := cors.New(cors.Options{
 		AllowCredentials: false,
 		AllowedMethods: []string{
@@ -66,7 +68,16 @@ func main() {
 		AllowedHeaders: []string{"Link", "If-Match", "If-None-Match", "Content-Type", "Accept"},
 		ExposedHeaders: []string{"Content-Type", "Link", "ETag", "Content-Disposition", "Content-Length"},
 		Debug:          true,
-	}).Handler(mux)
+	}).Handler(server)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		_ = <-c
+		log.Println("Closing database")
+		server.Close()
+		os.Exit(1)
+	}()
 
 	log.Println("http://localhost:8086")
 	log.Fatal(http.ListenAndServe(":8086", handler))

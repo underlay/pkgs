@@ -89,7 +89,7 @@ func (sp *PkgsPlugin) Start(api core.CoreAPI) error {
 	}
 
 	sp.srv = &http.Server{Addr: ":8086"}
-	http.HandleFunc("/", server.Handle)
+	http.HandleFunc("/", server.ServeHTTP)
 	go sp.listen()
 	return nil
 }

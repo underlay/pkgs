@@ -1,4 +1,4 @@
-package server
+package http
 
 import (
 	"context"
@@ -23,9 +23,9 @@ import (
 // var defaultContentType = "application/n-quads"
 
 var offers = map[query.ResourceType][]string{
-	query.PackageType: []string{"application/n-quads", "application/ld+json", "text/html"},
-	query.MessageType: []string{"application/n-quads", "application/ld+json"},
-	query.FileType:    []string{},
+	query.Package: []string{"application/n-quads", "application/ld+json", "text/html"},
+	query.Message: []string{"application/n-quads", "application/ld+json"},
+	query.File:    []string{},
 }
 
 // Get handles HTTP GET requests
@@ -59,7 +59,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 		// It's a little awkward to render the HTML for the web ui here,
 		// but it's the best way to do it
-		contentType = content.NegotiateContentType(req, offers[query.PackageType], defaultOffer)
+		contentType = content.NegotiateContentType(req, offers[query.Package], defaultOffer)
 		if p, is := resource.(*types.Package); is && contentType == "text/html" {
 			page, err = ui.MakePage(pathname, p, txn)
 		}
@@ -76,7 +76,7 @@ func (server *Server) Get(ctx context.Context, res http.ResponseWriter, req *htt
 
 	// It's important to check for more than contentType == "text/html" because
 	// some files will have f.Format == "text/html"!
-	if resource.Type() == query.PackageType && contentType == "text/html" {
+	if resource.Type() == query.Package && contentType == "text/html" {
 		res.Header().Add("Content-Type", contentType)
 		err = ui.PageTemplate.Execute(res, page)
 		if err != nil {
