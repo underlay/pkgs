@@ -21,7 +21,7 @@ This root URI isn't used for anything other than identifiers in RDF, so it doesn
 
 ### GET
 
-`GET` requests to a resource will return `Content-Type: application/n-quads` by default.
+`GET` requests to Message and Package resources will return `Content-Type: application/n-quads` by default, unless content negotiation returns `application/ld+json` (messages or packages) or `text/html` (packages only). In particular, a request header with `Accept: application/json` will not return JSON-LD and will default to N-Quads instead.
 
 ```
 % curl -i http://localhost:8086
