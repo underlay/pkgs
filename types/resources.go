@@ -90,8 +90,8 @@ var typeIri = ld.NewIRI(ld.RDFType)
 
 var base32 = regexp.MustCompile("^[a-z2-7]{59}$")
 var fileURI = regexp.MustCompile("^dweb:/ipfs/([a-z2-7]{59})$")
-var messageURI = regexp.MustCompile("^u:([a-z2-7]{59})$")
-var packageURI = regexp.MustCompile("^u:([a-z2-7]{59})#(_:c14n\\d+)$")
+var messageURI = regexp.MustCompile("^ul:([a-z2-7]{59})$")
+var packageURI = regexp.MustCompile("^ul:([a-z2-7]{59})#(_:c14n\\d+)$")
 
 var base = []*ld.Quad{
 	ld.NewQuad(subject, typeIri, PackageIri, ""),

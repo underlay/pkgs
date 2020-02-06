@@ -46,9 +46,7 @@ func GetPackage(pathname string, txn *badger.Txn) (p *Package, err error) {
 	}
 	if item.UserMeta() == uint8(query.PackageType) {
 		p = &Package{}
-		err = item.Value(func(val []byte) error {
-			return proto.Unmarshal(val, p)
-		})
+		err = item.Value(func(val []byte) error { return proto.Unmarshal(val, p) })
 	} else {
 		err = ErrNotPackage
 	}
