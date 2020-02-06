@@ -21,9 +21,7 @@ import (
 type Message []byte
 
 // Type exposes the message resource type
-func (m Message) Type() query.ResourceType {
-	return query.MessageType
-}
+func (m Message) Type() query.ResourceType { return query.Message }
 
 // ETag satisfies the Resource interface
 func (m Message) ETag() (cid.Cid, string) {
@@ -38,9 +36,7 @@ func (m Message) URI() string {
 }
 
 // Type exposes the package resource type
-func (p *Package) Type() query.ResourceType {
-	return query.PackageType
-}
+func (p *Package) Type() query.ResourceType { return query.Package }
 
 // ETag satisfies the Resource interface for Packages
 func (p *Package) ETag() (cid.Cid, string) {
@@ -55,9 +51,7 @@ func (p *Package) URI() string {
 }
 
 // Type exposes the file resource type
-func (f *File) Type() query.ResourceType {
-	return query.FileType
-}
+func (f *File) Type() query.ResourceType { return query.File }
 
 // ETag satisfies the Resource interface for Files
 func (f *File) ETag() (cid.Cid, string) {

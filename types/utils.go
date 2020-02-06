@@ -44,7 +44,7 @@ func GetPackage(pathname string, txn *badger.Txn) (p *Package, err error) {
 	if err != nil {
 		return nil, err
 	}
-	if item.UserMeta() == uint8(query.PackageType) {
+	if item.UserMeta() == uint8(query.Package) {
 		p = &Package{}
 		err = item.Value(func(val []byte) error { return proto.Unmarshal(val, p) })
 	} else {
@@ -62,17 +62,17 @@ func GetResource(pathname string, txn *badger.Txn) (r query.Resource, err error)
 	}
 
 	switch query.ResourceType(item.UserMeta()) {
-	case query.PackageType:
+	case query.Package:
 		item.Value(func(val []byte) error {
 			p := &Package{}
 			r = p
 			return proto.Unmarshal(val, p)
 		})
-	case query.MessageType:
+	case query.Message:
 		var val []byte
 		val, err = item.ValueCopy(make([]byte, messageLength))
 		r = Message(val)
-	case query.FileType:
+	case query.File:
 		item.Value(func(val []byte) error {
 			f := &File{}
 			r = f
