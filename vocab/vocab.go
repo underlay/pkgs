@@ -1,7 +1,7 @@
 package vocab
 
 import (
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 )
 
 var PROVwasRevisionOf = ld.NewIRI("http://www.w3.org/ns/prov#wasRevisionOf")

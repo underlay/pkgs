@@ -2,6 +2,7 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -193,16 +194,17 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 			// New message!
 			var doc interface{}
 			if contentType == "application/ld+json" {
-				doc = req.Body
+				err = json.NewDecoder(req.Body).Decode(&doc)
 			} else if contentType == "application/n-quads" {
 				doc, err = server.proc.FromRDF(req.Body, server.opts)
-				if err != nil {
-					res.WriteHeader(400)
-					return err
-				}
+			}
+			if err != nil {
+				res.WriteHeader(400)
+				return err
 			}
 
 			n, err := server.proc.Normalize(doc, server.opts)
+
 			if err != nil {
 				res.WriteHeader(400)
 				return err

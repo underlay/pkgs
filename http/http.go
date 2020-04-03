@@ -3,6 +3,7 @@ package http
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"regexp"
 	"strings"
@@ -15,7 +16,9 @@ import (
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
+
+	loader "github.com/underlay/go-dweb-loader/loader"
 
 	query "github.com/underlay/pkgs/query"
 	types "github.com/underlay/pkgs/types"
@@ -59,6 +62,7 @@ func (server *Server) Close() {
 
 // Initialize opens the Badger database and writes an empty root package if none exists
 func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreAPI) (*Server, error) {
+	log.Println("Opening badger database at", badgerPath)
 	opts := badger.DefaultOptions(badgerPath)
 	db, err := badger.Open(opts)
 	if err != nil {
@@ -79,7 +83,7 @@ func Initialize(ctx context.Context, badgerPath, resource string, api core.CoreA
 			UseNativeTypes: true,
 			Format:         "application/n-quads",
 			Algorithm:      "URDNA2015",
-			DocumentLoader: ld.NewDwebDocumentLoader(api),
+			DocumentLoader: loader.NewDwebDocumentLoader(api),
 		},
 	}
 

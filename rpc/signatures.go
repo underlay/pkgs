@@ -1,7 +1,7 @@
 package rpc
 
 import (
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 
 	indices "github.com/underlay/pkgs/indices"
 	query "github.com/underlay/pkgs/query"

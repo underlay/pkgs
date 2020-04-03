@@ -3,7 +3,7 @@ package rdf
 import (
 	"encoding/json"
 
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 )
 
 type Term interface {

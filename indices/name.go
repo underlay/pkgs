@@ -4,7 +4,7 @@ import (
 	"log"
 
 	bleve "github.com/blevesearch/bleve"
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 
 	query "github.com/underlay/pkgs/query"
 )

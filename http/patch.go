@@ -13,7 +13,7 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 	content "github.com/joeltg/negotiate/content"
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 
 	types "github.com/underlay/pkgs/types"
 	"github.com/underlay/pkgs/vocab"

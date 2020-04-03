@@ -10,8 +10,8 @@ import (
 	"os"
 	"os/signal"
 
+	ld "github.com/piprate/json-gold/ld"
 	jsonrpc2 "github.com/sourcegraph/jsonrpc2"
-	ld "github.com/underlay/json-gold/ld"
 
 	indices "github.com/underlay/pkgs/indices"
 	query "github.com/underlay/pkgs/query"

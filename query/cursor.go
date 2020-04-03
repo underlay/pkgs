@@ -1,6 +1,6 @@
 package query
 
-import ld "github.com/underlay/json-gold/ld"
+import ld "github.com/piprate/json-gold/ld"
 
 // A Cursor is an interactive query interface
 type Cursor interface {

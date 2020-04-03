@@ -14,7 +14,7 @@ import (
 	files "github.com/ipfs/go-ipfs-files"
 	options "github.com/ipfs/interface-go-ipfs-core/options"
 	content "github.com/joeltg/negotiate/content"
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 
 	types "github.com/underlay/pkgs/types"
 	vocab "github.com/underlay/pkgs/vocab"

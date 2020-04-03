@@ -1,6 +1,6 @@
 package query
 
-import ld "github.com/underlay/json-gold/ld"
+import ld "github.com/piprate/json-gold/ld"
 
 // A Signature is what database indices expose to support querying
 type Signature interface {

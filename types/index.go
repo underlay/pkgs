@@ -1,7 +1,7 @@
 package types
 
 import (
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 )
 
 type signature struct {

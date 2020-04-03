@@ -11,7 +11,7 @@ import (
 	badger "github.com/dgraph-io/badger/v2"
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	ld "github.com/underlay/json-gold/ld"
+	ld "github.com/piprate/json-gold/ld"
 
 	query "github.com/underlay/pkgs/query"
 	v "github.com/underlay/pkgs/vocab"
