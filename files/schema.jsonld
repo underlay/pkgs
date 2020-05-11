@@ -1,0 +1,40 @@
+{
+	"@context": [
+		"dweb:/ipfs/bafkreib6yqj52ndfimyqueoxxxgsxoiolpr6pfjz5ossxi6mc25bjok6fa",
+		{
+			"shex": "http://www.w3.org/ns/shex#",
+			"dcterms": "http://purl.org/dc/terms/",
+			"instances": {
+				"@reverse": "dcterms:conformsTo",
+				"@type": "@id",
+				"@container": "@set"
+			},
+			"shapes": {
+				"@id": "shex:shapes",
+				"@container": "@set"
+			},
+			"imports": {
+				"@id": "shex:imports",
+				"@container": "@set"
+			},
+			"extra": {
+				"@id": "shex:extra",
+				"@container": "@set"
+			}
+		}
+	],
+	"@type": "Schema",
+	"start": {
+		"@omitDefault": true,
+		"@type": "Shape",
+		"instances": {
+			"@embed": "@never"
+		}
+	},
+	"shapes": {
+		"@type": "Shape",
+		"instances": {
+			"@embed": "@never"
+		}
+	}
+}

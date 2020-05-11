@@ -1,99 +1,83 @@
 package rpc
 
 import (
-	ld "github.com/piprate/json-gold/ld"
+	"log"
 
+	rdf "github.com/underlay/go-rdfjs"
 	indices "github.com/underlay/pkgs/indices"
-	query "github.com/underlay/pkgs/query"
+	styx "github.com/underlay/styx"
 )
 
-var signatures = []query.Signature{}
+var signatures = []indices.Signature{}
 
 func init() {
-	for _, index := range indices.INDICES {
+	for _, index := range INDICES {
 		signatures = append(signatures, index.Signatures()...)
 	}
 }
 
-func getSignature(query []*ld.Quad) (query.Signature, map[string]ld.Node) {
+func getSignature(query []*rdf.Quad, domain []rdf.Term) (indices.Signature, []rdf.Term, []rdf.Term) {
+	store, err := styx.NewMemoryStore(nil)
+	defer store.Close()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
+	err = store.Set(rdf.Default, query)
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	for _, signature := range signatures {
-		head, domain := signature.Head(), signature.Domain()
-		unified, assignments := matchSignature(query, head, domain)
-		if unified {
-			return signature, assignments
+		head, base := signature.Head(), signature.Base()
+		if head == nil {
+			return signature, nil, nil
+		} else if len(query) != len(head) {
+			continue
 		}
-	}
-	return nil, nil
-}
 
-func matchSignature(query []*ld.Quad, head []*ld.Quad, domain []*ld.BlankNode) (bool, map[string]ld.Node) {
-	if head == nil {
-		return true, nil
-	} else if len(query) != len(head) {
-		return false, nil
-	}
+		iter, err := store.Query(head, base, nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
 
-	// Could be a lot smarter about pruning bad permutations
-	for p := make([]int, len(query)); p[0] < len(p); nextPerm(p) {
-		d := map[string]ld.Node{}
-		unified := true
-		for i, quad := range getPerm(query, p) {
-			if !unifyQuad(quad, head[i], domain, d) {
-				unified = false
+		delta, err := iter.Next(nil)
+		if err != nil {
+			log.Fatalln(err)
+		}
+
+		values := make([]rdf.Term, len(delta))
+		copy(values, delta)
+		for delta != nil {
+			complete := true
+			for i, term := range base {
+				if !ground(values[i]) {
+					delta, err = iter.Next(term)
+					if err != nil {
+						log.Fatalln(err)
+					}
+					copy(values[len(values)-len(delta):], delta)
+					complete = false
+					break
+				}
+			}
+			if complete {
 				break
 			}
 		}
-		if unified {
-			return true, d
+
+		iter.Close()
+
+		if delta == nil {
+			continue
 		}
+
+		return signature, iter.Domain(), values
 	}
-	return false, nil
+	return nil, nil, nil
 }
 
-func nextPerm(p []int) {
-	for i := len(p) - 1; i >= 0; i-- {
-		if i == 0 || p[i] < len(p)-i-1 {
-			p[i]++
-			return
-		}
-		p[i] = 0
-	}
-}
-
-func getPerm(orig []*ld.Quad, p []int) []*ld.Quad {
-	result := append([]*ld.Quad{}, orig...)
-	for i, v := range p {
-		result[i], result[i+v] = result[i+v], result[i]
-	}
-	return result
-}
-
-func unifyQuad(a, b *ld.Quad, domain []*ld.BlankNode, d map[string]ld.Node) (unified bool) {
-	return unify(a.Subject, b.Subject, domain, d) &&
-		unify(a.Predicate, b.Predicate, domain, d) &&
-		unify(a.Object, b.Object, domain, d)
-}
-
-// a is from the query, b is from the signature
-func unify(a, b ld.Node, domain []*ld.BlankNode, d map[string]ld.Node) bool {
-	switch b := b.(type) {
-	case *ld.IRI:
-		return a.Equal(b)
-	case *ld.Literal:
-		return a.Equal(b)
-	case *ld.BlankNode:
-		if c, has := d[b.Attribute]; has {
-			return a.Equal(c)
-		}
-		if ld.IsBlankNode(a) {
-			for _, node := range domain {
-				if node.Equal(b) {
-					return false
-				}
-			}
-		}
-		d[b.Attribute] = a
-		return true
-	}
-	return false
+func ground(term rdf.Term) bool {
+	t := term.TermType()
+	return t != rdf.VariableType && t != rdf.BlankNodeType
 }

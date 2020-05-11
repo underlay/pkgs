@@ -1,0 +1,72 @@
+{
+	"@context": {
+		"dcterms": "http://purl.org/dc/terms/",
+		"prov": "http://www.w3.org/ns/prov#",
+		"xsd": "http://www.w3.org/2001/XMLSchema#",
+		"ldp": "http://www.w3.org/ns/ldp#",
+		"id": {
+			"@id": "@id"
+		},
+		"resource": {
+			"@id": "ldp:membershipResource",
+			"@type": "@id"
+		},
+		"parent": {
+			"@id": "prov:wasRevisionOf",
+			"@type": "@id"
+		},
+		"value": {
+			"@id": "prov:value"
+		},
+		"title": {
+			"@id": "dcterms:title"
+		},
+		"description": {
+			"@id": "dcterms:description"
+		},
+		"keywords": {
+			"@id": "dcterms:subject",
+			"@container": "@set"
+		},
+		"created": {
+			"@id": "dcterms:created",
+			"@type": "xsd:dateTime"
+		},
+		"modified": {
+			"@id": "dcterms:modified",
+			"@type": "xsd:dateTime"
+		},
+		"extent": {
+			"@id": "dcterms:extent"
+		},
+		"format": {
+			"@id": "dcterms:format"
+		},
+		"members": {
+			"@id": "prov:hadMember",
+			"@container": [
+				"@type",
+				"@set"
+			]
+		},
+		"packages": {
+			"@id": "ldp:DirectContainer"
+		},
+		"assertions": {
+			"@id": "ldp:RDFSource"
+		},
+		"files": {
+			"@id": "ldp:NonRDFSource"
+		}
+	},
+	"@requireAll": true,
+	"@type": [
+		"ldp:DirectContainer",
+		"prov:Collection"
+	],
+	"ldp:hasMemberRelation": {
+		"@id": "prov:hadMember"
+	},
+	"value": {},
+	"resource": {}
+}

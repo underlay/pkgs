@@ -1,264 +1,336 @@
 package types
 
 import (
-	"context"
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"regexp"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 
-	badger "github.com/dgraph-io/badger/v2"
 	cid "github.com/ipfs/go-cid"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
-	ld "github.com/piprate/json-gold/ld"
-
-	query "github.com/underlay/pkgs/query"
-	v "github.com/underlay/pkgs/vocab"
 )
 
-// A Message is just the bytes of a CID
-type Message []byte
+var EmptyDirectoryURI = "dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
 
-// Type exposes the message resource type
-func (m Message) Type() query.ResourceType { return query.Message }
+var PackageURIPattern = regexp.MustCompile("^ul:([a-z2-7]{59})#(c14n\\d+)$")
+var AssertionURIPattern = regexp.MustCompile("^ul:([a-z2-7]{59})$")
+var FileURIPattern = regexp.MustCompile("^dweb:/ipfs/([a-z2-7]{59})$")
 
-// ETag satisfies the Resource interface
-func (m Message) ETag() (cid.Cid, string) {
-	c, s, _ := getCid(m)
-	return c, s
+// ResourceType is an enum for resource types
+type ResourceType uint8
+
+const (
+	_ ResourceType = iota
+	// PackageType = 1 the ResourceType for Packages
+	PackageType
+	// AssertionType = 2 the ResourceType for Assertions
+	AssertionType
+	// FileType = 3 is the ResourceType for Files
+	FileType
+)
+
+type Resource interface {
+	T() ResourceType
+	Type() string
+	Path() path.Resolved
+	ETag() string
+	URI() string
+	Name() string
 }
 
-// URI satisfies the Resource interface
-func (m Message) URI() string {
-	_, s, _ := getCid(m)
-	return v.MakeURI(s, "")
+type Reference struct {
+	ID       string `json:"id,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	Title    string `json:"title,omitempty"`
 }
 
-// Type exposes the package resource type
-func (p *Package) Type() query.ResourceType { return query.Package }
+func (r *Reference) T() ResourceType { return PackageType }
+func (r *Reference) Type() string    { return LDPDirectContainer }
+func (r *Reference) URI() string     { return r.ID }
 
-// ETag satisfies the Resource interface for Packages
-func (p *Package) ETag() (cid.Cid, string) {
-	c, s, _ := getCid(p.Id)
-	return c, s
+func (r *Reference) parseID() (id string, fragment string) {
+	match := PackageURIPattern.FindStringSubmatch(r.ID)
+	if match != nil {
+		id, fragment = match[1], match[2]
+	}
+	return
 }
 
-// URI satisfies the Resource interface
-func (p *Package) URI() string {
-	_, s, _ := getCid(p.Id)
-	return v.MakeURI(s, "#"+p.Subject)
+func (r *Reference) Path() path.Resolved {
+	id, _ := r.parseID()
+	c, _ := cid.Decode(id)
+	return path.IpfsPath(c)
 }
 
-// Type exposes the file resource type
-func (f *File) Type() query.ResourceType { return query.File }
-
-// ETag satisfies the Resource interface for Files
-func (f *File) ETag() (cid.Cid, string) {
-	c, s, _ := getCid(f.Value)
-	return c, s
+func (r *Reference) ETag() string {
+	id, _ := r.parseID()
+	return "\"" + id + "\""
 }
 
-// URI satisfies the Resource interface
-func (f *File) URI() string {
-	_, s, _ := getCid(f.Value)
-	return "dweb:/ipfs/" + s
+func (r *Reference) Name() string { return r.Title }
+
+func (r *Reference) Fragment() string {
+	match := PackageURIPattern.FindStringSubmatch(r.ID)
+	if match != nil {
+		return match[1]
+	}
+	return ""
 }
 
-const defaultSubject = "_:c14n0"
+type Assertion struct {
+	ID       string `json:"id,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Created  string `json:"created,omitempty"`
+	Modified string `json:"modified,omitempty"`
+}
 
-// EmptyDirectory is the CIDv1 of the empty directory
-// By default, IPFS nodes only pin the CIDv0 empty directory,
-// so we pin the v1 maually on initialization.
-const EmptyDirectory = "bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
+func (a *Assertion) T() ResourceType { return AssertionType }
+func (a *Assertion) Type() string    { return LDPRDFSource }
+func (a *Assertion) URI() string     { return a.ID }
+func (a *Assertion) Path() path.Resolved {
+	match := AssertionURIPattern.FindStringSubmatch(a.ID)
+	if match != nil {
+		c, _ := cid.Decode(match[1])
+		return path.IpfsPath(c)
+	}
+	return nil
+}
 
-// PackageIri is an rdf:type for Underlay Packages
-var PackageIri = ld.NewIRI("http://underlay.mit.edu/ns#Package")
+func (a *Assertion) ETag() string {
+	match := AssertionURIPattern.FindStringSubmatch(a.ID)
+	if match != nil {
+		return "\"" + match[1] + "\""
+	}
+	return ""
+}
 
-// EmptyDirectoryCID is the CID instance of EmptyDirectory
-var EmptyDirectoryCID, _ = cid.Decode(EmptyDirectory)
+func (a *Assertion) Name() string {
+	if a.Resource != "" && a.Title != "" {
+		return a.Title
+	}
+	match := AssertionURIPattern.FindStringSubmatch(a.ID)
+	if match != nil {
+		return match[1]
+	}
+	return ""
+}
 
-var subject = ld.NewBlankNode("_:b0")
+var NQuadsFileExtension = ".nq"
 
-var typeIri = ld.NewIRI(ld.RDFType)
+type File struct {
+	ID       string `json:"id,omitempty"`
+	Resource string `json:"resource,omitempty"`
+	Title    string `json:"title,omitempty"`
+	Created  string `json:"created,omitempty"`
+	Modified string `json:"modified,omitempty"`
+	Extent   int    `json:"extent"`
+	Format   string `json:"format"`
+}
 
-var base32 = regexp.MustCompile("^[a-z2-7]{59}$")
-var fileURI = regexp.MustCompile("^dweb:/ipfs/([a-z2-7]{59})$")
-var messageURI = regexp.MustCompile("^ul:([a-z2-7]{59})$")
-var packageURI = regexp.MustCompile("^ul:([a-z2-7]{59})#(_:c14n\\d+)$")
+func (f *File) T() ResourceType { return FileType }
+func (f *File) Type() string    { return LDPNonRDFSource }
+func (f *File) URI() string     { return f.ID }
+func (f *File) Path() path.Resolved {
+	match := FileURIPattern.FindStringSubmatch(f.ID)
+	if match != nil {
+		c, _ := cid.Decode(match[1])
+		return path.IpfsPath(c)
+	}
+	return nil
+}
 
-var base = []*ld.Quad{
-	ld.NewQuad(subject, typeIri, PackageIri, ""),
-	ld.NewQuad(subject, v.LDPhasMemberRelation, v.PROVhadMember, ""),
+func (f *File) ETag() string {
+	match := FileURIPattern.FindStringSubmatch(f.ID)
+	if match != nil {
+		return "\"" + match[1] + "\""
+	}
+	return ""
+}
+
+func (f *File) Name() string {
+	if f.Resource != "" && f.Title != "" {
+		return f.Title
+	}
+	match := FileURIPattern.FindStringSubmatch(f.ID)
+	if match != nil {
+		return match[1]
+	}
+	return ""
+}
+
+type Package struct {
+	Reference
+	Created     string   `json:"created,omitempty"`
+	Modified    string   `json:"modified,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Keywords    []string `json:"keywords,omitempty"`
+	Parent      string   `json:"parent,omitempty"`
+	Value       struct {
+		ID     string `json:"id"`
+		Extent int    `json:"extent"`
+	} `json:"value"`
+	Members struct {
+		Packages   []*Reference `json:"packages,omitempty"`
+		Assertions []*Assertion `json:"assertions,omitempty"`
+		Files      []*File      `json:"files,omitempty"`
+	} `json:"members,omitempty"`
 }
 
 // NewPackage creates a new timestamped package.
-// It does not pin it to IPFS or write it to the database.
-func NewPackage(ctx context.Context, t time.Time, pathname, resource string) *Package {
-	dateTime := t.Format(time.RFC3339)
-
-	pkg := &Package{
-		Resource: resource,
-		Subject:  defaultSubject,
-		Value:    EmptyDirectoryCID.Bytes(),
-		Extent:   4,
-		Created:  dateTime,
-		Modified: dateTime,
-		Member:   make([]string, 0),
-	}
-
+func NewPackage(resource, title string) *Package {
+	created := time.Now().Format(time.RFC3339)
+	pkg := &Package{Created: created, Modified: created}
+	pkg.Resource = resource
+	pkg.Title = title
+	pkg.Value.ID = EmptyDirectoryURI
+	pkg.Value.Extent = 4
 	return pkg
 }
 
-// ErrNotPackage is returned when a resource unmarhsalls into a non-package unexpectedly
-var ErrNotPackage = fmt.Errorf("Unexpected non-package resource")
+func (pkg *Package) T() ResourceType     { return PackageType }
+func (pkg *Package) Type() string        { return LDPDirectContainer }
+func (pkg *Package) URI() string         { return pkg.ID }
+func (pkg *Package) Path() path.Resolved { return pkg.Reference.Path() }
+func (pkg *Package) ETag() string        { return pkg.Reference.ETag() }
+func (pkg *Package) Name() string        { return pkg.Title }
 
-// GetPackage is a convenience method for retriving a package instance from the database
-
-// Paths is a convenience method for getting the path.Resolved version
-// of a packages ID and Value CIDs at the same time.
-func (p *Package) Paths() (id path.Resolved, value path.Resolved, err error) {
-	cidID, err := cid.Cast(p.Id)
-	if err != nil {
-		return nil, nil, err
+func (pkg *Package) SearchPackages(name string, isCid bool) (int, *Reference) {
+	l := len(pkg.Members.Packages)
+	f := func(i int) bool { return name <= pkg.Members.Packages[i].Title }
+	i := sort.Search(l, f)
+	if i < l && pkg.Members.Packages[i].Title == name {
+		return i, pkg.Members.Packages[i]
 	}
-	cidValue, err := cid.Cast(p.Value)
-	if err != nil {
-		return nil, nil, err
+	return i, nil
+}
+
+func (pkg *Package) SearchAssertions(name string, isCid bool) (int, *Assertion) {
+	l := len(pkg.Members.Assertions)
+	f := func(i int) bool {
+		assertion := pkg.Members.Assertions[i]
+		if (assertion.Resource == "") == isCid {
+			return name <= assertion.Name()
+		}
+		return isCid
 	}
-	return path.IpfsPath(cidID), path.IpfsPath(cidValue), nil
+	i := sort.Search(l, f)
+	if i < l && pkg.Members.Assertions[i].Name() == name {
+		return i, pkg.Members.Assertions[i]
+	}
+	return i, nil
 }
 
-// ValueURI returns the dweb URI for the package value
-func (p *Package) ValueURI() string {
-	_, s, _ := getCid(p.Value)
-	return "dweb:/ipfs/" + s
+func (pkg *Package) SearchFiles(name string, isCid bool) (int, *File) {
+	l := len(pkg.Members.Files)
+	f := func(i int) bool {
+		file := pkg.Members.Files[i]
+		if (file.Resource == "") == isCid {
+			return name <= file.Name()
+		}
+		return isCid
+	}
+	i := sort.Search(l, f)
+	if i < l && pkg.Members.Files[i].Name() == name {
+		return i, pkg.Members.Files[i]
+	}
+	return i, nil
 }
 
-var printLayout = "Mon, 02 Jan 2006 15:04:05 -0700"
-
-// PrintModified formats p.Modified as printLayout
-func (p *Package) PrintModified() string {
-	t, _ := time.Parse(time.RFC3339, p.Modified)
-	return t.Format(printLayout)
+func (pkg *Package) CopyResource() *Reference {
+	return &Reference{pkg.ID, pkg.Resource, pkg.Title}
 }
 
-// PrintCreated formats p.Created as printLayout
-func (p *Package) PrintCreated() string {
-	t, _ := time.Parse(time.RFC3339, p.Created)
-	return t.Format(printLayout)
+func (pkg *Package) Fragment() (c cid.Cid, fragment string) {
+	match := PackageURIPattern.FindStringSubmatch(pkg.Reference.ID)
+	if match != nil {
+		c, _ = cid.Decode(match[1])
+		fragment = match[2]
+	}
+	return
 }
 
-// NQuads converts the Package to a slice of ld.*Quads
-func (p *Package) NQuads(pathname string, txn *badger.Txn) ([]*ld.Quad, error) {
-	doc := make([]*ld.Quad, len(base), len(base)+6+len(p.Member))
-	copy(doc, base)
+func (pkg *Package) ValuePath() path.Resolved {
+	match := FileURIPattern.FindStringSubmatch(pkg.Value.ID)
+	if match != nil {
+		c, _ := cid.Decode(match[1])
+		return path.IpfsPath(c)
+	}
+	return nil
+}
 
-	tail := strings.LastIndex(p.Resource, "/")
-	title := ld.NewLiteral(p.Resource[tail+1:], "", "")
-
-	_, s, err := getCid(p.Value)
+func (pkg *Package) JsonLd(context string) (map[string]interface{}, error) {
+	buf := bytes.NewBuffer(nil)
+	err := json.NewEncoder(buf).Encode(pkg)
 	if err != nil {
 		return nil, err
 	}
 
-	value := ld.NewIRI("dweb:/ipfs/" + s)
-	extent := strconv.FormatUint(p.Extent, 10)
-	doc = append(doc,
-		ld.NewQuad(subject, v.DCTERMStitle, title, ""),
-		ld.NewQuad(subject, v.LDPmembershipResource, ld.NewIRI(p.Resource), ""),
-		ld.NewQuad(subject, v.PROVvalue, value, ""),
-		ld.NewQuad(value, v.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-		ld.NewQuad(subject, v.DCTERMScreated, ld.NewLiteral(p.Created, v.XSDdateTime, ""), ""),
-		ld.NewQuad(subject, v.DCTERMSmodified, ld.NewLiteral(p.Modified, v.XSDdateTime, ""), ""),
-	)
+	var doc map[string]interface{}
 
-	if p.RevisionOf != nil && p.RevisionOfSubject != "" {
-		_, r, err := getCid(p.RevisionOf)
-		if err != nil {
-			return nil, err
-		}
-		object := ld.NewIRI(v.MakeURI(r, "#"+p.RevisionOfSubject))
-		doc = append(doc, ld.NewQuad(subject, v.PROVwasRevisionOf, object, ""))
+	err = json.NewDecoder(buf).Decode(&doc)
+	if err != nil {
+		return nil, err
 	}
 
-	if p.Description != "" {
-		description := ld.NewLiteral(p.Description, "", "")
-		doc = append(doc, ld.NewQuad(subject, v.DCTERMSdescription, description, ""))
-	}
-
-	if len(p.Keyword) > 0 {
-		keywords := make([]*ld.Quad, len(p.Keyword))
-		for i, keyword := range p.Keyword {
-			object := ld.NewLiteral(keyword, "", "")
-			keywords[i] = ld.NewQuad(subject, v.DCTERMSsubject, object, "")
-		}
-		doc = append(doc, keywords...)
-	}
-
-	for _, name := range p.Member {
-		key := "/" + name
-		if pathname != "/" {
-			key = pathname + key
-		}
-
-		resource, err := GetResource(key, txn)
-		if err != nil {
-			return nil, err
-		}
-
-		switch t := resource.(type) {
-		case *Package:
-			_, s, err := getCid(t.Id)
-			if err != nil {
-				return nil, err
-			}
-
-			member := ld.NewIRI(v.MakeURI(s, "#"+t.Subject))
-			uri := ld.NewIRI(t.Resource)
-			doc = append(doc,
-				ld.NewQuad(subject, v.PROVhadMember, member, ""),
-				ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
-				ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
-			)
-		case Message:
-			_, s, err := getCid(t)
-			if err != nil {
-				return nil, err
-			}
-			member := ld.NewIRI(v.MakeURI(s, ""))
-			doc = append(doc, ld.NewQuad(subject, v.PROVhadMember, member, ""))
-			if s != name {
-				uri := ld.NewIRI(p.Resource + "/" + name)
-				doc = append(
-					doc,
-					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
-					ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
-				)
-			}
-		case *File:
-			_, s, err := getCid(t.Value)
-			if err != nil {
-				return nil, err
-			}
-
-			member := ld.NewIRI("dweb:/ipfs/" + s)
-			extent := strconv.FormatUint(t.Extent, 10)
-			doc = append(doc,
-				ld.NewQuad(subject, v.PROVhadMember, member, ""),
-				ld.NewQuad(member, v.DCTERMSextent, ld.NewLiteral(extent, ld.XSDInteger, ""), ""),
-				ld.NewQuad(member, v.DCTERMSformat, ld.NewLiteral(t.Format, ld.XSDString, ""), ""),
-			)
-			if s != name {
-				uri := ld.NewIRI(p.Resource + "/" + name)
-				doc = append(
-					doc,
-					ld.NewQuad(member, v.LDPmembershipResource, uri, ""),
-					ld.NewQuad(member, v.DCTERMStitle, ld.NewLiteral(name, "", ""), ""),
-				)
-			}
-		}
-	}
-
+	delete(doc, "id")
+	doc["@context"] = context
+	doc["@type"] = []interface{}{"ldp:DirectContainer", "prov:Collection"}
+	doc["ldp:hasMemberRelation"] = map[string]interface{}{"@id": "prov:hadMember"}
 	return doc, nil
+}
+
+func MakeLinkType(t string) string { return fmt.Sprintf(`<%s>; rel="type"`, t) }
+
+const (
+	LDPResource        = "http://www.w3.org/ns/ldp#Resource"
+	LDPDirectContainer = "http://www.w3.org/ns/ldp#DirectContainer"
+	LDPRDFSource       = "http://www.w3.org/ns/ldp#RDFSource"
+	LDPNonRDFSource    = "http://www.w3.org/ns/ldp#NonRDFSource"
+)
+
+var LinkTypeResource = MakeLinkType(LDPResource)
+var LinkTypeDirectContainer = MakeLinkType(LDPDirectContainer)
+var LinkTypeRDFSource = MakeLinkType(LDPRDFSource)
+var LinkTypeNonRDFSource = MakeLinkType(LDPNonRDFSource)
+
+func ParseLinks(links []string) (self string, t ResourceType) {
+	// var isResource bool
+	for _, link := range links {
+		if link == LinkTypeResource {
+			// isResource = true
+		} else if link == LinkTypeDirectContainer {
+			t |= PackageType
+		} else if link == LinkTypeRDFSource {
+			t |= AssertionType
+		} else if link == LinkTypeNonRDFSource {
+			t |= FileType
+		} else if linkSelfPattern.MatchString(link) {
+			match := linkSelfPattern.FindStringSubmatch(link)
+			self = match[1]
+		}
+	}
+	return
+}
+
+var linkSelfPattern = regexp.MustCompile(`^<([^<>; \t]+)>; rel="self"$`)
+
+func ParsePath(p string) []string {
+	p = strings.TrimPrefix(p, "/")
+	p = strings.TrimSuffix(p, "/")
+	if p == "" {
+		return nil
+	}
+	return strings.Split(p, "/")
+}
+
+func GetURI(base string, key []string) (u string) {
+	u = base
+	for _, name := range key {
+		u += "/" + name
+	}
+	return
 }

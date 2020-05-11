@@ -1,44 +1,15 @@
 package ui
 
 import (
-	"fmt"
 	"html/template"
 	"strings"
-
-	badger "github.com/dgraph-io/badger/v2"
-
-	types "github.com/underlay/pkgs/types"
 )
-
-// Page is the local struct we use for representing the data that gets rendered on an HTML page
-type Page struct {
-	Pathname string
-	P        *types.Package
-	Packages map[string]*types.Package
-	Messages map[string]types.Message
-	Files    map[string]*types.File
-}
-
-// Paths splits the pathname into a slice of path elements
-func (p *Page) Paths() []string {
-	if p.Pathname == "/" {
-		return nil
-	}
-	components := strings.Split(p.Pathname[1:], "/")
-
-	// var prev string
-	// for i, component := range components {
-	// 	components[i] = prev + "/" + component
-	// 	prev = components[i]
-	// }
-	return components
-}
 
 var pageTemplate = `<!DOCTYPE html>
 <html lang="en">
 	<head>
 		<meta charset="UTF-8" />
-		<title>● {{ .Pathname }}</title>
+		<title>● /{{ join .Key "/" }}</title>
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
 	</head>
 	<style>
@@ -47,137 +18,118 @@ var pageTemplate = `<!DOCTYPE html>
 			color: #111;
 		}
 		body {
-			max-width: max-content;
+			width: 640px;
 			margin: 1em auto;
 		}
 		table {
-			border-spacing: 0 2px;
+			border-collapse: collapse;
 		}
-		table tr td:nth-child(2) {
-			padding-left: 1em;
+		td {
+			vertical-align: top;
+			padding: 0;
 		}
-		pre {
-			margin: 0;
+		.label {
+			padding-right: 1em;
 		}
 	</style>
 	<body>
 		<header>
 			<h1>
 				<a href="/">●</a>
-				{{ $paths := split .Pathname "/" }}
-				{{ range $index, $element := $paths }}
-					{{ if ne $index 0 }}
-						/ <a href="{{ join (slice $paths 0 $index) "/"}}/{{ $element }}">{{ $element }}</a>
-					{{ end }}
+				{{ $key := .Key }}
+				{{ range $i, $name := $key }}
+					/ <a class="label" href="{{ join (slice $key 0 $i) "/"}}/{{ $name }}">{{ $name }}</a>
 				{{ end }}
 			</h1>
 		</header>
+		<h1>{{ .Pkg.Title }}</h1>
 		<table>
-			<tr><td>Resource</td><td><pre>{{ .P.Resource }}</pre></td></tr>
-			<tr><td>Version</td><td><pre>{{ .P.URI }}</pre></td></tr>
-			<tr><td>Value</td><td><pre>{{ .P.ValueURI }}</pre></td></tr>
-			<tr><td>Created</td><td>{{ .P.PrintCreated }}</td></tr>
-			<tr><td>Modified</td><td>{{ .P.PrintModified }}</td></tr>
+			<tr><td><span class="label">Resource</span></td><td>{{ .Pkg.Resource }}</td></tr>
+			<tr><td><span class="label">ID</span></td><td>{{ .Pkg.ID }}</td></tr>
+			<tr><td><span class="label">Parent</span></td><td>{{ .Pkg.Parent }}</td></tr>
+			<tr><td><span class="label">Description</span></td><td>{{ .Pkg.Description }}</td></tr>
+			<tr><td rowspan="2"><span class="label">Contents</span></td><td>{{ .Pkg.Value.ID }}</td></tr>
+			<tr><td>{{ .Pkg.Value.Extent }} bytes</td></tr>
+			<tr><td><span class="label">Created</span></td><td>{{ .Pkg.Created }}</td></tr>
+			<tr><td><span class="label">Modified</span></td><td>{{ .Pkg.Modified }}</td></tr>
 		</table>
 		<hr />
+		{{ $base := .Pkg.Title }}
+		{{ if eq (len .Key) 0 }}
+			{{ $base = "." }}
+		{{ end }}
 		<section>
-			<h2>Packages</h2>
-			<dl>
-				{{ $p := .Pathname }}
-				{{ if eq .Pathname "/" }}
-					{{ $p = "" }}
-				{{ end }}
-				{{ range $key, $value := .Packages }}
-				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
-				<dd><pre>{{ $value.URI }}</pre></dd>
-				{{ else }}
-				No packages
-				{{ end }}
-			</dl>
+		<h2>Packages</h2>
+		{{ if gt (len .Pkg.Members.Packages) 0 }}
+		<table>
+			{{ range $i, $pkg := .Pkg.Members.Packages }}
+			<tr>
+				<td><a class="label" href="{{ $base }}/{{ $pkg.Title }}">{{ $pkg.Title }}</a></td>
+				<td>{{ $pkg.ID }}</td>
+			</tr>
+			{{ end }}
+		</table>
+		{{ else }}
+		No packages
+		{{ end }}
 		</section>
 		<section>
-			<h2>Messages</h2>
-			<dl>
-				{{ $p := .Pathname }}
-				{{ if eq .Pathname "/" }}
-					{{ $p = "" }}
-				{{ end }}
-				{{ range $key, $value := .Messages }}
-				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
-				<dd><pre>{{ $value.URI }}</pre></dd>
-				{{ else }}
-				No messages
-				{{ end }}
-			</dl>
+		<h2>Assertions</h2>
+		{{ if gt (len .Pkg.Members.Assertions) 0 }}
+		<table>
+			{{ range $i, $assertion := .Pkg.Members.Assertions }}
+			<tr>
+				<td rowspan="2">
+					{{ if ne $assertion.Resource "" }}
+					<a class="label" href="{{ $base }}/{{ $assertion.Title }}">{{ $assertion.Title }}</a>
+					{{ end }}
+				</td>
+				<td>{{ $assertion.ID }}</td>
+			</tr>
+			<tr>
+				<td>
+					created <span class="created">{{ $assertion.Created }}</span>
+					{{- if ne $assertion.Resource "" }}, modified <span class="modified">{{ $assertion.Modified }}</span>{{ end }}
+				</td>
+			</tr>
+			{{ end }}
+		</table>
+		{{ else }}
+		No assertions
+		{{ end }}
 		</section>
 		<section>
-			<h2>Files</h2>
-			<dl>
-				{{ $p := .Pathname }}
-				{{ if eq .Pathname "/" }}
-					{{ $p = "" }}
-				{{ end }}
-				{{ range $key, $value := .Files }}
-				<dt><a href="{{ $p }}/{{ $key }}">{{ $key }}</a></dt>
-				<dd>
-					<pre>{{ $value.URI }}</pre>
-					<pre>{{ $value.Format }}</pre>
-					<pre>{{ $value.Extent }} B</pre>
-				</dd>
-				{{ else }}
-				No files
-				{{ end }}
-			</dl>
+		<h2>Files</h2>
+		{{ if gt (len .Pkg.Members.Files) 0 }}
+		<table>
+			{{ range $i, $file := .Pkg.Members.Files }}
+			<tr>
+				<td rowspan="3">
+					{{ if ne $file.Resource "" }}
+					<a class="label" href="{{ $base }}/{{ $file.Title }}">{{ $file.Title }}</a>
+					{{ end }}
+				</td>
+				<td>{{ $file.ID }}</td>
+			</tr>
+			<tr>
+				<td>
+					created <span class="created">{{ $file.Created }}</span>
+					{{- if ne $file.Resource "" }}, modified <span class="modified">{{ $file.Modified }}</span>{{ end }}
+				</td>
+			</tr>
+			<tr>
+				<td><span class="format">{{ $file.Format }}</span>, <span class="extent">{{ $file.Extent }}</span> bytes</td>
+			</tr>
+			{{ end }}
+		</table>
+		{{ else }}
+		No files
+		{{ end }}
 		</section>
-		<hr />
-		<form method="POST" enctype="multipart/form-data">
-			<label>
-				Add files:
-				<input type="file" name="file" multiple />
-			</label>
-			<input type="submit" value="Submit" />
-		</form>
 	</body>
 </html>`
 
-var funcs = template.FuncMap{
-	"join":  strings.Join,
-	"split": strings.Split,
-}
+var funcs = template.FuncMap{"join": strings.Join}
 
 // PageTemplate is the template for HTML package pages
 var PageTemplate = template.Must(template.New("page").Funcs(funcs).Parse(pageTemplate))
-
-// MakePage generates a page given a read-only badger transaction and a pathname
-func MakePage(pathname string, p *types.Package, txn *badger.Txn) (*Page, error) {
-	packagePage := &Page{
-		Pathname: pathname,
-		P:        p,
-		Packages: make(map[string]*types.Package),
-		Messages: make(map[string]types.Message),
-		Files:    make(map[string]*types.File),
-	}
-
-	for _, member := range p.Member {
-		var memberPath string
-		if pathname == "/" {
-			memberPath = "/" + member
-		} else {
-			memberPath = fmt.Sprintf("%s/%s", pathname, member)
-		}
-		resource, err := types.GetResource(memberPath, txn)
-		if err != nil {
-			return nil, err
-		}
-
-		switch t := resource.(type) {
-		case *types.Package:
-			packagePage.Packages[member] = t
-		case types.Message:
-			packagePage.Messages[member] = t
-		case *types.File:
-			packagePage.Files[member] = t
-		}
-	}
-	return packagePage, nil
-}

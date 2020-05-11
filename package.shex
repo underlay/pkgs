@@ -1,41 +1,41 @@
-PREFIX u: <http://underlay.mit.edu/ns#>
 PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
 PREFIX ldp: <http://www.w3.org/ns/ldp#>
 PREFIX prov: <http://www.w3.org/ns/prov#>
 PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX shex: <http://www.w3.org/ns/shex#>
 
-start = @_:package
-
-_:package bnode CLOSED {
-  a [ u:Package ] ;
+start = bnode {
+  a [ ldp:DirectContainer ] ;
+  a [ prov:Collection ] ;
   ldp:hasMemberRelation [ prov:hadMember ] ;
-  ldp:membershipResource iri ;
-  dcterms:title xsd:string ;
+  $_:resource ldp:membershipResource iri ;
+  $_:title dcterms:title xsd:string ;
   dcterms:description xsd:string ? ;
-  ( dcterms:subject xsd:string ) * ;
-  dcterms:created xsd:dateTime ;
-  dcterms:modified xsd:dateTime ;
-  prov:wasRevisionOf iri /^u:[a-z0-9]{59}#_:c14n[0-9]+$/ ? ;
-  prov:value @_:v ;
-  ( prov:hadMember @_:p ) * ;
-  ( prov:hadMember @_:m ) * ;
-  ( prov:hadMember @_:f ) * ;
-}
+  dcterms:subject xsd:string * ;
+  $_:created dcterms:created xsd:dateTime ;
+  $_:modified dcterms:modified xsd:dateTime ;
+  prov:wasRevisionOf iri /^ul:[a-z2-7]{59}#_:c14n[0-9]+$/ ? ;
+  prov:value iri /^dweb:\/ipfs\/[a-z2-7]{59}$/ {
+    $_:extent dcterms:extent xsd:integer ;
+  } ;
 
-_:v iri /^dweb:\/ipfs\/[a-z0-9]{59}$/ CLOSED {
-  dcterms:extent xsd:integer ;
-}
-
-_:p iri /^u:[a-z0-9]{59}#_:c14n[0-9]+$/ CLOSED {
-  ldp:membershipResource iri ;
-}
-
-_:m iri /^u:[a-z0-9]{59}$/ CLOSED {
-  ldp:membershipResource iri ? ;
-}
-
-_:f iri /^dweb:\/ipfs\/[a-z0-9]{59}$/ CLOSED {
-  dcterms:extent xsd:integer ;
-  dcterms:format xsd:string ;
-  ldp:membershipResource iri ? ;
+  prov:hadMember iri /^ul:[a-z2-7]{59}#_:c14n[0-9]+$/ {
+    a [ ldp:DirectContainer ] ;
+    &_:resource ;
+    &_:title ;
+  } OR iri /^ul:[a-z2-7]{59}$/ {
+    a [ ldp:RDFSource ] ;
+    &_:created ;
+    $_:resource-option (
+      &_:resource ;
+      &_:title ;
+      &_:modified ;
+    ) ? ;
+  } OR iri /^dweb:\/ipfs\/[a-z2-7]{59}$/ {
+    a [ ldp:NonRDFSource ] ;
+    dcterms:format xsd:string ;
+    &_:extent ;
+    &_:created ;
+    &_:resource-option ;
+  } * ;
 }
