@@ -3,7 +3,6 @@ package rpc
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log"
 	"net"
 	"os"
@@ -90,15 +89,7 @@ func callQuery(params []json.RawMessage, handler *rpcHandler) (interface{}, int6
 		}
 	}
 
-	signature, signatureDomain, signatureIndex := getSignature(quads, domain)
-	if signature == nil {
-		return nil, jsonrpc2.CodeInternalError, errors.New("No matching query signature found")
-	}
-
-	handler.Iterator, err = makeIterator(
-		quads, domain, index,
-		signature, signatureDomain, signatureIndex,
-	)
+	handler.Iterator, err = getIterator(quads, domain, index)
 
 	if err != nil {
 		return nil, jsonrpc2.CodeInternalError, err

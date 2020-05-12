@@ -26,8 +26,8 @@ var base = "http://localhost:8086"
 
 func main() {
 	app := &cli.App{
-		Name:                 "pkgs",
-		Usage:                "interact with resources on pkgs",
+		Name:                 "ul",
+		Usage:                "interact with resources on a package server",
 		EnableBashCompletion: true,
 		Commands: []*cli.Command{
 			{
@@ -370,7 +370,12 @@ func main() {
 						domain[i] = term.String()
 					}
 
-					fmt.Print(strings.Join(domain, "\t\t"))
+					if len(domain) == 0 {
+						fmt.Println("No results")
+						return nil
+					}
+
+					fmt.Print(strings.Join(domain, "\t"))
 
 					reader := bufio.NewReader(os.Stdin)
 					// fmt.Print("Next: ")

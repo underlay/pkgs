@@ -1,12 +1,14 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"time"
 
 	files "github.com/ipfs/go-ipfs-files"
 	ld "github.com/piprate/json-gold/ld"
+	rdf "github.com/underlay/go-rdfjs"
 	types "github.com/underlay/pkgs/types"
 )
 
@@ -28,10 +30,23 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 		return
 	case types.AssertionType:
 		if format == "" && self != "" && types.AssertionURIPattern.MatchString(self) {
-			r = &types.Assertion{ID: self, Created: timestamp}
-			break
+			a := &types.Assertion{ID: self, Created: timestamp}
+			node, err := server.api.Unixfs().Get(ctx, a.Path())
+			if err != nil {
+				res.WriteHeader(502)
+				res.Write([]byte(err.Error()))
+				return
+			}
+			a.Dataset, err = rdf.ReadQuads(files.ToFile(node))
+			if err != nil {
+				res.WriteHeader(400)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			r = a
 		} else if format == offers[0] || format == offers[1] || format == offers[2] {
-			doc, err := parseContent(format, parentResource, req.Body)
+			dataset, err := parseDataset(format, parentResource, req.Body)
 			if err != nil {
 				res.WriteHeader(400)
 				res.Write([]byte(err.Error()))
@@ -39,21 +54,29 @@ func (server *Server) Post(ctx context.Context, res http.ResponseWriter, req *ht
 			}
 
 			opts := ld.NewJsonLdOptions(parentResource)
-			opts.DocumentLoader = server.documentLoader
-			opts.Algorithm = "URDNA2015"
 			opts.Format = "application/n-quads"
-			normalized, err := ld.NewJsonLdProcessor().Normalize(doc, opts)
+			na := ld.NewNormalisationAlgorithm("URDNA2015")
+			normalised, err := na.Main(dataset, opts)
 			if err != nil {
 				res.WriteHeader(400)
 				res.Write([]byte(err.Error()))
 				return
 			}
 
-			a := &types.Assertion{Created: timestamp, Modified: timestamp}
-			node := files.NewBytesFile([]byte(normalized.(string)))
-			err = server.setAssertion(ctx, a, node)
+			data := []byte(normalised.(string))
+			file := files.NewBytesFile(data)
+
+			a := &types.Assertion{Created: timestamp}
+			err = server.setAssertion(ctx, a, file)
 			if err != nil {
 				res.WriteHeader(502)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			a.Dataset, err = rdf.ReadQuads(bytes.NewReader(data))
+			if err != nil {
+				res.WriteHeader(400)
 				res.Write([]byte(err.Error()))
 				return
 			}

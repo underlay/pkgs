@@ -4,13 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"log"
 	"regexp"
 	"sort"
 	"strings"
 	"time"
 
 	cid "github.com/ipfs/go-cid"
+	files "github.com/ipfs/go-ipfs-files"
+	iface "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
+	rdf "github.com/underlay/go-rdfjs"
+	"golang.org/x/net/context"
 )
 
 var EmptyDirectoryURI = "dweb:/ipfs/bafybeiczsscdsbs7ffqz55asqdf3smv6klcw3gofszvwlyarci47bgf354"
@@ -81,11 +86,12 @@ func (r *Reference) Fragment() string {
 }
 
 type Assertion struct {
-	ID       string `json:"id,omitempty"`
-	Resource string `json:"resource,omitempty"`
-	Title    string `json:"title,omitempty"`
-	Created  string `json:"created,omitempty"`
-	Modified string `json:"modified,omitempty"`
+	ID       string      `json:"id,omitempty"`
+	Resource string      `json:"resource,omitempty"`
+	Title    string      `json:"title,omitempty"`
+	Created  string      `json:"created,omitempty"`
+	Modified string      `json:"modified,omitempty"`
+	Dataset  []*rdf.Quad `json:"-"`
 }
 
 func (a *Assertion) T() ResourceType { return AssertionType }
@@ -98,6 +104,26 @@ func (a *Assertion) Path() path.Resolved {
 		return path.IpfsPath(c)
 	}
 	return nil
+}
+
+func (a *Assertion) GetDataset(api iface.CoreAPI) []*rdf.Quad {
+	if a.Dataset != nil {
+		return a.Dataset
+	}
+
+	ctx := context.Background()
+	node, err := api.Unixfs().Get(ctx, a.Path())
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	quads, err := rdf.ReadQuads(files.ToFile(node))
+	if err != nil {
+		log.Println(err)
+		return nil
+	}
+	a.Dataset = quads
+	return quads
 }
 
 func (a *Assertion) ETag() string {
@@ -276,10 +302,13 @@ func (pkg *Package) JsonLd(context string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	delete(doc, "id")
 	doc["@context"] = context
 	doc["@type"] = []interface{}{"ldp:DirectContainer", "prov:Collection"}
 	doc["ldp:hasMemberRelation"] = map[string]interface{}{"@id": "prov:hadMember"}
+	if _, has := doc["id"]; has {
+		delete(doc, "id")
+	}
+
 	return doc, nil
 }
 

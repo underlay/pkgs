@@ -7,30 +7,39 @@ import (
 	"text/tabwriter"
 
 	badger "github.com/dgraph-io/badger/v2"
-	coreiface "github.com/ipfs/interface-go-ipfs-core"
+	iface "github.com/ipfs/interface-go-ipfs-core"
 	rdf "github.com/underlay/go-rdfjs"
 	types "github.com/underlay/pkgs/types"
+	styx "github.com/underlay/styx"
 )
+
+type Rule interface {
+	Head() []*rdf.Quad
+	Body() []*rdf.Quad
+}
 
 // An Index is the interface for database indices
 type Index interface {
 	Name() string
-	Init(api coreiface.CoreAPI, db *badger.DB, path string)
+	Init(resource string, api iface.CoreAPI, db *badger.DB, path string)
 	Close()
-	Set(key []string, resource types.Resource)
-	Delete(key []string, resource types.Resource)
-	Signatures() []Signature
+	Set(key []string, resource types.Resource, dataset []*rdf.Quad, store *styx.Store) error
+	Delete(key []string, resource types.Resource, dataset []*rdf.Quad, store *styx.Store) error
 }
 
-// A Signature is what database indices expose to support querying
-type Signature interface {
-	Head() []*rdf.Quad
+type Generator interface {
+	Rule
 	Base() []rdf.Term
 	Query(
 		query []*rdf.Quad,
 		domain []rdf.Term,
 		index []rdf.Term,
 	) (Iterator, error)
+}
+
+type GeneratorIndex interface {
+	Generator
+	Index
 }
 
 // An Iterator is an interactive query interface
@@ -40,6 +49,7 @@ type Iterator interface {
 	Index() []rdf.Term
 	Next(node rdf.Term) ([]rdf.Term, error)
 	Seek(index []rdf.Term) error
+	Prov() ([][]rdf.Term, error)
 	Close()
 }
 

@@ -67,7 +67,7 @@ func main() {
 			log.Fatalln(err)
 		}
 
-		index.Init(api, db, path)
+		index.Init(pkgsRoot, api, db, path)
 	}
 
 	server, err := NewServer(ctx, pkgsRoot, db, api)

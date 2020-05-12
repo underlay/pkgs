@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	badger "github.com/dgraph-io/badger/v2"
+
 	rpc "github.com/underlay/pkgs/rpc"
 	types "github.com/underlay/pkgs/types"
 )
@@ -48,20 +49,20 @@ func (server *Server) set(ctx context.Context, key []string, r types.Resource, t
 		if isOldAssertion {
 			r.Created = oldAssertion.Created
 		} else if isOldPackage {
-			err = deleteChildren(key, oldPackage, txn)
+			err = server.deleteChildren(key, oldPackage, txn)
 		}
 	case *types.File:
 		if isOldFile {
 			r.Created = oldFile.Created
 		} else if isOldPackage {
-			err = deleteChildren(key, oldPackage, txn)
+			err = server.deleteChildren(key, oldPackage, txn)
 		}
 	}
 	if err != nil {
 		return err
 	}
 
-	rpc.Set(key, r)
+	rpc.Set(key, r, server.api)
 	err = setResource(key, r, txn)
 	if err != nil {
 		return err
@@ -85,7 +86,7 @@ func (server *Server) setChildren(
 			return err
 		}
 
-		rpc.Set(key, child)
+		rpc.Set(key, child, server.api)
 		err = setResource(key, child, txn)
 		if err != nil {
 			return err
@@ -94,7 +95,7 @@ func (server *Server) setChildren(
 
 	for _, a := range pkg.Members.Assertions {
 		childKey := append(key, a.Name())
-		rpc.Set(childKey, a)
+		rpc.Set(childKey, a, server.api)
 		err := setResource(childKey, a, txn)
 		if err != nil {
 			return err
@@ -103,7 +104,7 @@ func (server *Server) setChildren(
 
 	for _, f := range pkg.Members.Files {
 		childKey := append(key, f.Name())
-		rpc.Set(childKey, f)
+		rpc.Set(childKey, f, server.api)
 		err := setResource(childKey, f, txn)
 		if err != nil {
 			return err
@@ -131,12 +132,12 @@ func (server *Server) diffChildren(
 				return err
 			}
 
-			err = deleteChildren(childKey, oldChild, txn)
+			err = server.deleteChildren(childKey, oldChild, txn)
 			if err != nil {
 				return err
 			}
 
-			rpc.Delete(childKey, oldChild)
+			rpc.Delete(childKey, oldChild, server.api)
 			err = txn.Delete(getKey(childKey))
 			if err != nil {
 				return err
@@ -158,7 +159,7 @@ func (server *Server) diffChildren(
 					return err
 				}
 
-				rpc.Set(childKey, newChild)
+				rpc.Set(childKey, newChild, server.api)
 				err = setResource(childKey, newChild, txn)
 				if err != nil {
 					return err
@@ -180,7 +181,7 @@ func (server *Server) diffChildren(
 				return err
 			}
 
-			rpc.Set(childKey, newChild)
+			rpc.Set(childKey, newChild, server.api)
 			err = setResource(childKey, newChild, txn)
 			if err != nil {
 				return err
@@ -194,20 +195,24 @@ func (server *Server) diffChildren(
 		i, new := pkg.SearchAssertions(name, old.Resource == "")
 		if new == nil {
 			childKey := append(key, name)
-			rpc.Delete(childKey, old)
+			rpc.Delete(childKey, old, server.api)
 			err := txn.Delete(getKey(childKey))
 			if err != nil {
 				return err
 			}
 		} else {
-			assertionExists[i] = *new == *old
+			assertionExists[i] = new.ID == old.ID &&
+				new.Resource == old.Resource &&
+				new.Title == old.Title &&
+				new.Created == old.Created &&
+				new.Modified == old.Modified
 		}
 	}
 
 	for i, a := range assertions {
 		if !assertionExists[i] {
 			childKey := append(key, a.Name())
-			rpc.Set(childKey, a)
+			rpc.Set(childKey, a, server.api)
 			err := setResource(childKey, a, txn)
 			if err != nil {
 				return err
@@ -221,7 +226,7 @@ func (server *Server) diffChildren(
 		i, new := pkg.SearchFiles(name, old.Resource == "")
 		if new == nil {
 			childKey := append(key, name)
-			rpc.Delete(childKey, old)
+			rpc.Delete(childKey, old, server.api)
 			err := txn.Delete(getKey(childKey))
 			if err != nil {
 				return err
@@ -234,7 +239,7 @@ func (server *Server) diffChildren(
 	for i, f := range files {
 		if !fileExists[i] {
 			childKey := append(key, f.Name())
-			rpc.Set(childKey, f)
+			rpc.Set(childKey, f, server.api)
 			err := setResource(childKey, assertions[i], txn)
 			if err != nil {
 				return err

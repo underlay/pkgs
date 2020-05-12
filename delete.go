@@ -27,13 +27,13 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	}
 
 	if pkg, is := r.(*types.Package); is {
-		err = deleteChildren(key, pkg, txn)
+		err = server.deleteChildren(key, pkg, txn)
 		if err != nil {
 			return
 		}
 	}
 
-	rpc.Delete(key, r)
+	rpc.Delete(key, r, server.api)
 	err = txn.Delete(getKey(key))
 	if err != nil {
 		res.WriteHeader(500)
@@ -59,7 +59,7 @@ func (server *Server) Delete(ctx context.Context, res http.ResponseWriter, req *
 	res.WriteHeader(204)
 }
 
-func deleteChildren(
+func (server *Server) deleteChildren(
 	key []string, pkg *types.Package,
 	txn *badger.Txn,
 ) error {
@@ -70,12 +70,12 @@ func deleteChildren(
 			return err
 		}
 
-		err = deleteChildren(childKey, childPkg, txn)
+		err = server.deleteChildren(childKey, childPkg, txn)
 		if err != nil {
 			return err
 		}
 
-		rpc.Delete(childKey, childPkg)
+		rpc.Delete(childKey, childPkg, server.api)
 		err = txn.Delete(getKey(childKey))
 		if err != nil {
 			return err
@@ -84,7 +84,7 @@ func deleteChildren(
 
 	for _, a := range pkg.Members.Assertions {
 		childKey := append(key, a.Name())
-		rpc.Delete(childKey, a)
+		rpc.Delete(childKey, a, server.api)
 		err := txn.Delete(getKey(childKey))
 		if err != nil {
 			return err
@@ -93,7 +93,7 @@ func deleteChildren(
 
 	for _, f := range pkg.Members.Files {
 		childKey := append(key, f.Name())
-		rpc.Delete(childKey, f)
+		rpc.Delete(childKey, f, server.api)
 		err := txn.Delete(getKey(childKey))
 		if err != nil {
 			return err

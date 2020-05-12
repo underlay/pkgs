@@ -172,3 +172,34 @@ schema.jsonld  dweb:/ipfs/bafkreigpvc6gujkuvja4usyjykcpakdmjtoegehls5rdln4mzxenv
 shex.jsonld    dweb:/ipfs/bafkreicqpmn3cyvyr4ioy6link2deaik53nih4tqobee7xmco2xpfiu7gu 2020-05-04T20:08:52-04:00 2020-05-04T20:08:52-04:00 application/ld+json 30939
 
 ```
+
+## Querying
+
+By default, pkgs manages a styx instance of all of the assertions. You can query it with `ul query`:
+
+```
+% cat message.jsonld
+{
+  "@context": {
+    "@vocab": "http://schema.org/",
+    "prov": "http://www.w3.org/ns/prov#"
+  },
+  "prov:wasAttributedTo": { "name": "The Small Town Gazette" },
+  "@graph": {
+    "@id": "http://example.com/jane-doe",
+    "name": "Jane Doe",
+    "jobTitle": "Professor",
+    "knows": {
+      "@id": "http://example.com/john-doe"
+    }
+  }
+}
+% ul post --assertion --format application/ld+json message.jsonld /
+% ul query '<http://example.com/jane-doe> ?foo ?bar .'
+?foo                            ?bar
+<http://schema.org/jobTitle>    "Professor"
+<http://schema.org/knows>       <http://example.com/john-doe>
+<http://schema.org/name>        "Jane Doe"
+```
+
+(press enter to tab through the results)

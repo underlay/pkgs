@@ -6,28 +6,27 @@ import (
 
 	bleve "github.com/blevesearch/bleve"
 	badger "github.com/dgraph-io/badger/v2"
-	coreiface "github.com/ipfs/interface-go-ipfs-core"
+	iface "github.com/ipfs/interface-go-ipfs-core"
 	rdf "github.com/underlay/go-rdfjs"
 
 	indices "github.com/underlay/pkgs/indices"
 	types "github.com/underlay/pkgs/types"
+	styx "github.com/underlay/styx"
 )
 
 // MatchPredicate is the text matching predicate
 var MatchPredicate = "pkgs:/text/match"
-
-var _ indices.Index = (*textIndex)(nil)
 
 type textIndex struct {
 	bleve.Index
 }
 
 // NewTextIndex creates a new text index
-func NewTextIndex() indices.Index { return &textIndex{} }
+func NewTextIndex() indices.GeneratorIndex { return &textIndex{} }
 
 func (ti *textIndex) Name() string { return "text" }
 
-func (ti *textIndex) Init(api coreiface.CoreAPI, db *badger.DB, path string) {
+func (ti *textIndex) Init(resource string, api iface.CoreAPI, db *badger.DB, path string) {
 	log.Println("Initializing text index", path)
 	index, err := bleve.Open(path)
 	if err == bleve.ErrorIndexMetaMissing {
@@ -54,38 +53,44 @@ func (ti *textIndex) Close() {
 	ti.Index.Close()
 }
 
-func (ti *textIndex) Set(key []string, resource types.Resource) {
+func (ti *textIndex) Set(key []string, resource types.Resource, dataset []*rdf.Quad, store *styx.Store) error {
 	if ti.Index == nil {
-		return
+		return nil
 	}
 
 	id := "/" + strings.Join(key, "/")
 	err := ti.Index.Index(id, resource)
 	if err != nil {
-		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
-func (ti *textIndex) Delete(key []string, resource types.Resource) {
+func (ti *textIndex) Delete(key []string, resource types.Resource, dataset []*rdf.Quad, store *styx.Store) error {
 	if ti.Index == nil {
-		return
+		return nil
 	}
 
 	id := "/" + strings.Join(key, "/")
 	err := ti.Index.Delete(id)
 	if err != nil {
-		log.Println(err)
+		return err
 	}
+
+	return nil
 }
 
 var subject = rdf.NewVariable("subject")
 var predicate = rdf.NewNamedNode(MatchPredicate)
 var object = rdf.NewVariable("object")
+var title = rdf.NewNamedNode("http://purl.org/dc/terms/title")
 var head = rdf.NewQuad(subject, predicate, object, nil)
+var body = rdf.NewQuad(subject, title, object, nil)
 
-func (ti *textIndex) Signatures() []indices.Signature { return []indices.Signature{ti} }
-func (ti *textIndex) Head() []*rdf.Quad               { return []*rdf.Quad{head} }
-func (ti *textIndex) Base() []rdf.Term                { return []rdf.Term{object} }
+func (ti *textIndex) Head() []*rdf.Quad { return []*rdf.Quad{head} }
+func (ti *textIndex) Base() []rdf.Term  { return []rdf.Term{object} }
+func (ti *textIndex) Body() []*rdf.Quad { return []*rdf.Quad{body} }
 func (ti *textIndex) Query(
 	query []*rdf.Quad,
 	domain, index []rdf.Term,
@@ -200,4 +205,5 @@ func (iter *textIterator) Seek(index []rdf.Term) error {
 	return nil
 }
 
-func (iter *textIterator) Close() {}
+func (iter *textIterator) Prov() ([][]rdf.Term, error) { return nil, nil }
+func (iter *textIterator) Close()                      {}

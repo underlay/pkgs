@@ -24,7 +24,8 @@ require (
 	github.com/sourcegraph/jsonrpc2 v0.0.0-20200429184054-15c2290dcb37
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/underlay/go-dweb-loader v0.3.2
-	github.com/underlay/go-rdfjs v0.3.4
-	github.com/underlay/styx v0.3.1
+	github.com/underlay/go-rdfjs v0.3.6
+	github.com/underlay/styx v0.3.3
 	github.com/urfave/cli/v2 v2.2.0
+	golang.org/x/net v0.0.0-20200506145744-7e3656a0809f
 )

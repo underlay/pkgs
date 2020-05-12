@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -41,7 +42,7 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 			}
 			break
 		} else if format == offers[0] || format == offers[1] || format == offers[2] {
-			doc, err := parseContent(format, resource, req.Body)
+			doc, err := parseDocument(format, resource, req.Body)
 			if err != nil {
 				res.WriteHeader(400)
 				res.Write([]byte(err.Error()))
@@ -68,32 +69,54 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 		}
 	case types.AssertionType:
 		if format == "" && self != "" && types.AssertionURIPattern.MatchString(self) {
-			r = &types.Assertion{ID: self, Resource: resource, Title: name, Created: timestamp, Modified: timestamp}
-			break
-		} else if format == offers[0] || format == offers[1] || format == offers[2] {
-			doc, err := parseContent(format, resource, req.Body)
-			if err != nil {
-				res.WriteHeader(400)
-				res.Write([]byte(err.Error()))
-				return
-			}
-
-			opts := ld.NewJsonLdOptions(resource)
-			opts.DocumentLoader = server.documentLoader
-			opts.Algorithm = "URDNA2015"
-			opts.Format = "application/n-quads"
-			normalized, err := ld.NewJsonLdProcessor().Normalize(doc, opts)
-			if err != nil {
-				res.WriteHeader(400)
-				res.Write([]byte(err.Error()))
-				return
-			}
-
-			a := &types.Assertion{Resource: resource, Title: name, Created: timestamp, Modified: timestamp}
-			node := files.NewBytesFile([]byte(normalized.(string)))
-			err = server.setAssertion(ctx, a, node)
+			a := &types.Assertion{ID: self, Resource: resource, Title: name, Created: timestamp, Modified: timestamp}
+			node, err := server.api.Unixfs().Get(ctx, r.Path())
 			if err != nil {
 				res.WriteHeader(502)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			a.Dataset, err = rdf.ReadQuads(files.ToFile(node))
+			if err != nil {
+				res.WriteHeader(502)
+				res.Write([]byte(err.Error()))
+				return
+			}
+			r = a
+			break
+		} else if format == offers[0] || format == offers[1] || format == offers[2] {
+			dataset, err := parseDataset(format, resource, req.Body)
+			if err != nil {
+				res.WriteHeader(400)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			na := ld.NewNormalisationAlgorithm("URDNA2015")
+			opts := ld.NewJsonLdOptions(resource)
+			opts.Format = "application/n-quads"
+			normalised, err := na.Main(dataset, opts)
+			if err != nil {
+				res.WriteHeader(400)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			data := []byte(normalised.(string))
+			file := files.NewBytesFile(data)
+
+			a := &types.Assertion{Resource: resource, Title: name, Created: timestamp, Modified: timestamp}
+			err = server.setAssertion(ctx, a, file)
+			if err != nil {
+				res.WriteHeader(502)
+				res.Write([]byte(err.Error()))
+				return
+			}
+
+			a.Dataset, err = rdf.ReadQuads(bytes.NewReader(data))
+			if err != nil {
+				res.WriteHeader(500)
 				res.Write([]byte(err.Error()))
 				return
 			}
@@ -159,13 +182,16 @@ func (server *Server) Put(ctx context.Context, res http.ResponseWriter, req *htt
 	res.WriteHeader(204)
 }
 
-func parseContent(format string, base string, body io.Reader) (doc interface{}, err error) {
+func parseDocument(format string, base string, body io.Reader) (doc interface{}, err error) {
 	if format == offers[0] {
 		opts := ld.NewJsonLdOptions(base)
 		opts.Format = format
 		doc, err = ld.NewJsonLdProcessor().FromRDF(body, opts)
 	} else if format == offers[1] {
 		err = json.NewDecoder(body).Decode(&doc)
+		if err != nil {
+			return
+		}
 	} else if format == offers[2] {
 		var quads []*rdf.Quad
 		err = json.NewDecoder(body).Decode(&quads)
@@ -175,6 +201,36 @@ func parseContent(format string, base string, body io.Reader) (doc interface{}, 
 		dataset := styx.ToRDFDataset(quads)
 		opts := ld.NewJsonLdOptions(base)
 		doc, err = ld.NewJsonLdApi().FromRDF(dataset, opts)
+		if err != nil {
+			return
+		}
+	}
+
+	return
+}
+
+func parseDataset(format string, base string, body io.Reader) (dataset *ld.RDFDataset, err error) {
+	if format == offers[0] {
+		dataset, err = ld.ParseNQuadsFrom(body)
+		if err != nil {
+			return
+		}
+	} else if format == offers[1] {
+		var doc, rdf interface{}
+		err = json.NewDecoder(body).Decode(&doc)
+		if err != nil {
+			return
+		}
+		opts := ld.NewJsonLdOptions(base)
+		rdf, err = ld.NewJsonLdProcessor().ToRDF(doc, opts)
+		dataset = rdf.(*ld.RDFDataset)
+	} else if format == offers[2] {
+		var quads []*rdf.Quad
+		err = json.NewDecoder(body).Decode(&quads)
+		if err != nil {
+			return
+		}
+		dataset = styx.ToRDFDataset(quads)
 	}
 
 	return

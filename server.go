@@ -9,7 +9,7 @@ import (
 
 	badger "github.com/dgraph-io/badger/v2"
 	files "github.com/ipfs/go-ipfs-files"
-	coreiface "github.com/ipfs/interface-go-ipfs-core"
+	iface "github.com/ipfs/interface-go-ipfs-core"
 	path "github.com/ipfs/interface-go-ipfs-core/path"
 	multibase "github.com/multiformats/go-multibase"
 	ld "github.com/piprate/json-gold/ld"
@@ -21,7 +21,7 @@ import (
 
 // Server is the main pkgs struct
 type Server struct {
-	api            coreiface.CoreAPI
+	api            iface.CoreAPI
 	db             *badger.DB
 	resource       string
 	documentLoader ld.DocumentLoader
@@ -36,7 +36,7 @@ func (server *Server) Close() { server.db.Close() }
 var links = map[string]string{}
 
 // NewServer opens the Badger database and writes an empty root package if none exists
-func NewServer(ctx context.Context, resource string, db *badger.DB, api coreiface.CoreAPI) (*Server, error) {
+func NewServer(ctx context.Context, resource string, db *badger.DB, api iface.CoreAPI) (*Server, error) {
 	documentLoader := loader.NewDwebDocumentLoader(api)
 	server := &Server{api, db, resource, documentLoader, sync.Mutex{}, nil, nil}
 
@@ -107,7 +107,7 @@ func (server *Server) createInitialPackage(
 		f.Created = pkg.Created
 		f.Modified = pkg.Modified
 		key := []string{f.Title}
-		rpc.Set(key, f)
+		rpc.Set(key, f, server.api)
 		err = setResource(key, f, txn)
 		if err != nil {
 			return
@@ -130,7 +130,7 @@ func (server *Server) createInitialPackage(
 	}
 
 	id = pkg.Path()
-	rpc.Set(nil, pkg)
+	rpc.Set(nil, pkg, server.api)
 	err = setResource(nil, pkg, txn)
 	return
 }
@@ -355,7 +355,7 @@ func (server *Server) normalize(ctx context.Context, pkg *types.Package) (path.R
 	}
 
 	proc := ld.NewJsonLdProcessor()
-	opts := ld.NewJsonLdOptions("")
+	opts := ld.NewJsonLdOptions(server.resource)
 	opts.DocumentLoader = server.documentLoader
 	dataset, err := proc.ToRDF(doc, opts)
 	if err != nil {
