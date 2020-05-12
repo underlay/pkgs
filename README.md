@@ -44,8 +44,7 @@ You should be able to open `http://localhost:8086` in a web browser and see the 
 You can also build a cli tool:
 
 ```
-cd cli
-go build -o ul
+go build -o ul ./cli
 ```
 
-This should give you a `ul` binary. You can then use it as described in the [CLI docs](CLI.md).
+This should give you a `ul` binary. You can use it as described in the [CLI docs](CLI.md).
